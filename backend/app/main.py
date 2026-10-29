@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from app import readings
+from app import monitoring, readings
 from app.db import Base, engine
 
 
@@ -41,3 +41,4 @@ def health():
 
 
 app.include_router(readings.router)
+app.include_router(monitoring.router)
