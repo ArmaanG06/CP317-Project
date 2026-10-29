@@ -40,6 +40,16 @@ Patients submit vital signs and view their most recent values. Code lives in `ba
 - **Auth:** both endpoints require a signed-in user (session cookie from `POST /auth/login`; 401 otherwise). The patient ID always comes from the logged-in user, never the request, and professionals get 403.
 - **Database:** the `readings` table stores one row per vital value (blood pressure is two rows linked by `submission_id`), with UTC `recorded_at` and an index on `(patient_id, vital_type, recorded_at)`. `patient_id` is a UUID foreign key to `users.id`. Tables are created on startup by `create_all`, which can be replaced with migrations.
 
+### User profiles (Armaan Gandhara)
+Patients and professionals view and update their own personal details on the **My profile** page (`/profile`). Code lives in `backend/app/profiles.py` and `frontend/src/pages/Profile.jsx`, tests in `backend/tests/test_profiles.py`.
+
+| Endpoint | Description |
+|---|---|
+| `GET /profile` | The signed-in user's profile (fields are `null` until first saved) |
+| `PUT /profile` | Create or replace the signed-in user's profile |
+
+Stored in the `profiles` table (one row per user, keyed by `users.id`): full legal name, preferred name, date of birth, sex (female/male/intersex), gender (free text), address (street, unit, city, province/territory, postal code) and contact details (phone, emergency contact name and phone). Postal codes and phone numbers are normalized (e.g. `N2L 3C5`, `(519) 555-0123`), and invalid input returns the same 422 `errors` format as readings. `python seed.py` creates all tables and fills in fictional profiles for every demo user.
+
 ## Running locally
 Setup instructions coming as the project is built.
 

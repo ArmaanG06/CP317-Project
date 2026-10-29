@@ -1,4 +1,4 @@
-import { Bell, Calendar, ChartLine, CirclePlus, Heart, LayoutDashboard, LogOut, Users } from "lucide-react";
+import { Bell, Calendar, ChartLine, CirclePlus, Heart, LayoutDashboard, LogOut, UserRound, Users } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
@@ -7,11 +7,13 @@ const PATIENT_NAV = [
   { to: "/patient/record", label: "Record vitals", Icon: CirclePlus },
   { to: "/patient/trends", label: "Trends & history", Icon: ChartLine },
   { to: "/patient/appointments", label: "Appointments", Icon: Calendar },
+  { to: "/profile", label: "My profile", Icon: UserRound },
 ];
 const PRO_NAV = [
   { to: "/professional", label: "My patients", Icon: Users, end: true },
   { label: "Alerts", Icon: Bell, soon: true },
   { label: "Schedule", Icon: Calendar, soon: true },
+  { to: "/profile", label: "My profile", Icon: UserRound },
 ];
 
 const ITEM = "flex h-12 w-full items-center gap-3 rounded-full px-4 font-medium focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-white";

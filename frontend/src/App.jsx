@@ -4,6 +4,7 @@ import { useAuth } from "./auth/AuthContext";
 import AppShell from "./components/AppShell";
 import ComingSoon from "./pages/ComingSoon";
 import PatientDashboard from "./pages/PatientDashboard";
+import Profile from "./pages/Profile";
 import RecordVitals from "./pages/RecordVitals";
 import SignIn from "./pages/SignIn";
 
@@ -32,6 +33,7 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route path="/" element={<HomeRedirect />} />
         <Route element={<AppShell />}>
+          <Route path="/profile" element={<Profile />} />
           <Route element={<RequireRole role="patient" />}>
             <Route path="/patient" element={<PatientDashboard />} />
             <Route path="/patient/record" element={<RecordVitals />} />
