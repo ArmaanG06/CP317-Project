@@ -19,22 +19,12 @@ USERS = [
     ("Zakir Hasham", "zakir.hasham@example.com", Role.patient),
     ("Arica Ng", "arica.ng@example.com", Role.professional),
     ("Jenny Wang", "jenny.wang@example.com", Role.patient),
-    # Generated demo users (fictional names)
-    ("Sofia Marquez", "sofia.marquez@example.com", Role.patient),
-    ("Ethan Kowalski", "ethan.kowalski@example.com", Role.patient),
-    ("Amara Nwosu", "amara.nwosu@example.com", Role.patient),
-    ("Liam O'Connell", "liam.oconnell@example.com", Role.patient),
-    ("Yuki Tanaka", "yuki.tanaka@example.com", Role.patient),
-    ("Omar Haddad", "omar.haddad@example.com", Role.patient),
-    ("Chloe Tremblay", "chloe.tremblay@example.com", Role.patient),
-    ("Ravi Patel", "ravi.patel@example.com", Role.patient),
-    ("Isabella Rossi", "isabella.rossi@example.com", Role.patient),
-    ("Noah Fischer", "noah.fischer@example.com", Role.patient),
-    ("Fatima Al-Sayed", "fatima.alsayed@example.com", Role.patient),
-    ("Dr. Samuel Mensah", "samuel.mensah@example.com", Role.professional),
-    ("Dr. Elena Petrova", "elena.petrova@example.com", Role.professional),
-    ("Dr. Marcus Reid", "marcus.reid@example.com", Role.professional),
-    ("Dr. Aisha Khan", "aisha.khan@example.com", Role.professional),
+    # Joke demo users
+    ("Fih", "fih@example.com", Role.patient),
+    ("Cuh", "cuh@example.com", Role.patient),
+    ("Tung Tung Tung Sahur", "tung.sahur@example.com", Role.patient),
+    ("Goopy Grumstein", "goopy.grumstein@example.com", Role.patient),
+    ("Professor Yustin Jao", "yustin.jao@example.com", Role.professional),
 ]
 
 
