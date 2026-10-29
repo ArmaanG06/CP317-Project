@@ -22,9 +22,11 @@ function renderRoster() {
   );
 }
 
+const MAYA = "8cbfce12-7d92-48b0-96cb-eac3b00cf321";
+const DANIEL = "4787dbdd-d66c-4dc8-a034-5521b447f10e";
 const ROSTER = [
-  { patient_id: 1, assigned_at: "2026-10-01T12:00:00Z", dashboard_path: "/patients/1" },
-  { patient_id: 3, assigned_at: "2026-10-02T12:00:00Z", dashboard_path: "/patients/3" },
+  { patient_id: DANIEL, full_name: "Daniel Okafor", assigned_at: "2026-10-01T12:00:00Z", dashboard_path: `/patients/${DANIEL}` },
+  { patient_id: MAYA, full_name: "Maya Chen", assigned_at: "2026-10-02T12:00:00Z", dashboard_path: `/patients/${MAYA}` },
 ];
 
 describe("Professional roster", () => {
@@ -52,15 +54,15 @@ describe("Professional roster", () => {
     mockFetch(200, ROSTER);
     renderRoster();
     const links = await screen.findAllByRole("link");
-    expect(links.map((a) => a.textContent)).toEqual(["Patient #1", "Patient #3"]);
-    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/patients/1", "/patients/3"]);
+    expect(links.map((a) => a.textContent)).toEqual(["Daniel Okafor", "Maya Chen"]);
+    expect(links.map((a) => a.getAttribute("href"))).toEqual([`/patients/${DANIEL}`, `/patients/${MAYA}`]);
   });
 
   it("opens the selected patient's dashboard", async () => {
     mockFetch(200, ROSTER);
     const user = userEvent.setup();
     renderRoster();
-    await user.click(await screen.findByRole("link", { name: "Patient #3" }));
+    await user.click(await screen.findByRole("link", { name: "Maya Chen" }));
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Patient dashboard");
   });
 

@@ -1,6 +1,6 @@
 """AUTH-2: roles, professional-patient assignments, and server-side access checks.
 
-Roles come from the signed-in user (`CurrentUser.role`, set by AUTH-1's login).
+Roles come from the signed-in user (`User.role`, set at login by AUTH-1).
 Assignments link a health professional to the patients they are allowed to monitor.
 
 Access rule (enforced on the server, never trusted from the frontend):
@@ -9,19 +9,22 @@ Access rule (enforced on the server, never trusted from the frontend):
 - anything else gets 403
 """
 
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import DateTime, Integer, UniqueConstraint, select
+from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, select
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
-from app.deps import CurrentUser, get_current_user
+from app.deps import CurrentUser
+from app.models import Role, User
 
 # --- Roles (AUTH-2-T1) ---
-ROLE_PATIENT = "patient"
-ROLE_PROFESSIONAL = "professional"
-ROLES = (ROLE_PATIENT, ROLE_PROFESSIONAL)
+# The roles themselves live on the users table (app.models.Role); these are shorthands.
+ROLE_PATIENT = Role.patient
+ROLE_PROFESSIONAL = Role.professional
 
 
 # --- Model (AUTH-2-T1) ---
@@ -31,15 +34,25 @@ class PatientAssignment(Base):
     __tablename__ = "patient_assignments"
     __table_args__ = (UniqueConstraint("professional_id", "patient_id", name="uq_assignment_pair"),)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # TODO: FKs to the users table once AUTH-1's schema lands
-    professional_id: Mapped[int] = mapped_column(Integer, index=True)
-    patient_id: Mapped[int] = mapped_column(Integer, index=True)
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    professional_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    patient_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-def assign_patient(db: Session, professional_id: int, patient_id: int) -> PatientAssignment:
-    """Create an assignment, or return the existing one (safe to call twice)."""
+def assign_patient(db: Session, professional_id: uuid.UUID, patient_id: uuid.UUID) -> PatientAssignment:
+    """Assign a patient to a professional. Safe to call twice; rejects wrong roles."""
+    professional = db.get(User, professional_id)
+    patient = db.get(User, patient_id)
+    if professional is None or professional.role != ROLE_PROFESSIONAL:
+        raise ValueError("Assignments need an existing professional account.")
+    if patient is None or patient.role != ROLE_PATIENT:
+        raise ValueError("Only patient accounts can be assigned.")
+
     existing = db.scalar(
         select(PatientAssignment).where(
             PatientAssignment.professional_id == professional_id,
@@ -57,7 +70,7 @@ def assign_patient(db: Session, professional_id: int, patient_id: int) -> Patien
     return row
 
 
-def is_assigned(db: Session, professional_id: int, patient_id: int) -> bool:
+def is_assigned(db: Session, professional_id: uuid.UUID, patient_id: uuid.UUID) -> bool:
     return (
         db.scalar(
             select(PatientAssignment.id).where(
@@ -70,7 +83,7 @@ def is_assigned(db: Session, professional_id: int, patient_id: int) -> bool:
 
 
 # --- Checks (AUTH-2-T2) ---
-def can_access_patient(db: Session, user: CurrentUser, patient_id: int) -> bool:
+def can_access_patient(db: Session, user: User, patient_id: uuid.UUID) -> bool:
     if user.role == ROLE_PATIENT:
         return user.id == patient_id
     if user.role == ROLE_PROFESSIONAL:
@@ -78,23 +91,19 @@ def can_access_patient(db: Session, user: CurrentUser, patient_id: int) -> bool:
     return False
 
 
-def require_patient_access(
-    patient_id: int,
-    user: CurrentUser = Depends(get_current_user),
-    db: Session = Depends(get_db),
-) -> CurrentUser:
+def require_patient_access(patient_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)) -> User:
     """FastAPI dependency for any route with `{patient_id}` in its path."""
     if not can_access_patient(db, user, patient_id):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not have access to this patient's records.")
     return user
 
 
-def require_role(role: str):
+def require_role(role: Role):
     """FastAPI dependency factory, e.g. `Depends(require_role(ROLE_PROFESSIONAL))`."""
 
-    def check(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    def check(user: CurrentUser) -> User:
         if user.role != role:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, f"Only {role}s can use this feature.")
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"Only {role.value}s can use this feature.")
         return user
 
     return check

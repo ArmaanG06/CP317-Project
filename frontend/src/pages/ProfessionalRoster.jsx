@@ -40,7 +40,7 @@ export default function ProfessionalRoster() {
         <ul aria-label="Assigned patients" className="roster">
           {state.patients.map((p) => (
             <li key={p.patient_id}>
-              <Link to={p.dashboard_path}>Patient #{p.patient_id}</Link>
+              <Link to={p.dashboard_path}>{p.full_name}</Link>
               <span className="muted"> · assigned {new Date(p.assigned_at).toLocaleDateString()}</span>
             </li>
           ))}
