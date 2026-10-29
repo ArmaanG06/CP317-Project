@@ -19,6 +19,10 @@ USERS = [
     ("Zakir Hasham", "zakir.hasham@example.com", Role.patient),
     ("Arica Ng", "arica.ng@example.com", Role.professional),
     ("Jenny Wang", "jenny.wang@example.com", Role.patient),
+    # Additional demo patients
+    ("Ethan Tremblay", "ethan.tremblay@example.com", Role.patient),
+    ("Olivia Gagnon", "olivia.gagnon@example.com", Role.patient),
+    ("Noah MacDonald", "noah.macdonald@example.com", Role.patient),
     # Joke demo users
     ("Fih", "fih@example.com", Role.patient),
     ("Cuh", "cuh@example.com", Role.patient),
