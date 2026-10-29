@@ -61,3 +61,8 @@ def patient2_client():
 @pytest.fixture
 def professional_client():
     return _client_as(CurrentUser(id=99, role="professional"))
+
+
+@pytest.fixture
+def professional2_client():
+    return _client_as(CurrentUser(id=98, role="professional"))
