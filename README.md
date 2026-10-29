@@ -37,8 +37,8 @@ Patients submit vital signs and view their most recent values. Code lives in `ba
 `field` is `null` for form-level errors (e.g. "Enter at least one vital sign.").
 
 **Notes for teammates**
-- **Auth:** `backend/app/deps.py` `get_current_user()` is a placeholder returning patient `DEV_PATIENT_ID`. Replace its body with real session/JWT verification; endpoints don't need to change. The patient ID always comes from the logged-in user, never the request, and non-patients get 403.
-- **Database:** the `readings` table stores one row per vital value (blood pressure is two rows linked by `submission_id`), with UTC `recorded_at` and an index on `(patient_id, vital_type, recorded_at)`. `patient_id` needs a foreign key once the patients table exists. Tables are created on startup by `create_all`, which can be replaced with migrations.
+- **Auth:** both endpoints require a signed-in user (session cookie from `POST /auth/login`; 401 otherwise). The patient ID always comes from the logged-in user, never the request, and professionals get 403.
+- **Database:** the `readings` table stores one row per vital value (blood pressure is two rows linked by `submission_id`), with UTC `recorded_at` and an index on `(patient_id, vital_type, recorded_at)`. `patient_id` is a UUID foreign key to `users.id`. Tables are created on startup by `create_all`, which can be replaced with migrations.
 
 ## Running locally
 Setup instructions coming as the project is built.
@@ -50,7 +50,9 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows
 source .venv/bin/activate       # macOS/Linux
 pip install -r requirements.txt
-cp .env.example .env            # Windows: copy .env.example .env
+cp .env.example .env            # Windows: copy .env.example .env, then fill in DATABASE_URL and JWT_SECRET
+python seed.py                  # optional: add demo users (password Demo-Pass-123)
 uvicorn app.main:app --reload   # API at http://127.0.0.1:8000, docs at http://127.0.0.1:8000/docs
 pytest -q                       # run tests
 ```
+`tests/test_auth.py` uses the real database and the seeded demo users, so it needs a filled-in `.env` and `python seed.py`. The readings tests use an in-memory database and run without one.

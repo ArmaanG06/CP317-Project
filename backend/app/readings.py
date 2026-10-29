@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import AfterValidator, BaseModel, ConfigDict, field_validator, model_validator
-from sqlalchemy import DateTime, Float, Index, Integer, String, func, select
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Uuid, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
@@ -32,8 +32,7 @@ class Reading(Base):
     __table_args__ = (Index("ix_readings_patient_vital_time", "patient_id", "vital_type", "recorded_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    # TODO: FK to patients once DB owner's schema lands
-    patient_id: Mapped[int] = mapped_column(Integer, index=True)
+    patient_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
     vital_type: Mapped[str] = mapped_column(String(20))
     value: Mapped[float] = mapped_column(Float)
     unit: Mapped[str] = mapped_column(String(10))
@@ -118,7 +117,7 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def save_reading(db: Session, patient_id: int, payload: ReadingCreate) -> list[Reading]:
+def save_reading(db: Session, patient_id: uuid.UUID, payload: ReadingCreate) -> list[Reading]:
     submission_id = str(uuid.uuid4())
     recorded_at = utcnow()
     rows = [
@@ -141,7 +140,7 @@ def save_reading(db: Session, patient_id: int, payload: ReadingCreate) -> list[R
     return rows
 
 
-def get_latest(db: Session, patient_id: int) -> list[LatestReading]:
+def get_latest(db: Session, patient_id: uuid.UUID) -> list[LatestReading]:
     ranked = (
         select(
             Reading.id,
