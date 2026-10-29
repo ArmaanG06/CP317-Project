@@ -9,7 +9,7 @@ from sqlalchemy import DateTime, Float, Index, Integer, String, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
-from app.deps import CurrentUser, get_current_user
+from app.deps import CurrentUser
 
 # --- Input limits ---
 # Physically plausible values used to reject bad input (inclusive bounds).
@@ -184,7 +184,7 @@ def _require_patient(user: CurrentUser) -> None:
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=list[ReadingOut])
 def create_reading(
     payload: ReadingCreate,
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser,
     db: Session = Depends(get_db),
 ):
     _require_patient(user)
@@ -192,6 +192,9 @@ def create_reading(
 
 
 @router.get("/latest", response_model=list[LatestReading])
-def latest_readings(user: CurrentUser = Depends(get_current_user), db: Session = Depends(get_db)):
+def latest_readings(
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+):
     _require_patient(user)
     return get_latest(db, user.id)

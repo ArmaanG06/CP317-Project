@@ -1,6 +1,6 @@
 # CP317 Group 19: Health Monitoring System
 
-**Authors:** Zakir Hasham, Armaan Gandhara, Jacob Habte, Arica Ng, Jenny Wang
+**Authors:** Zakir Hasham, Armaan Gandhara, Jacob Habte, Arica Ng, Jenny Wang\
 **Stack:** React.js (Front-End), FastAPI, Python, Supabase (SQL Backend)
 
 ## Structure
