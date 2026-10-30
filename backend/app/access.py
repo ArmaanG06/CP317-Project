@@ -13,8 +13,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import Depends, HTTPException, status
-from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, select
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, Uuid, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
@@ -34,12 +33,12 @@ class PatientAssignment(Base):
     __tablename__ = "patient_assignments"
     __table_args__ = (UniqueConstraint("professional_id", "patient_id", name="uq_assignment_pair"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     professional_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     patient_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 

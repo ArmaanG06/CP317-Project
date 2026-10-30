@@ -1,32 +1,25 @@
 import os
 
-# app.config requires these; set safe test values before the app is imported.
+from dotenv import load_dotenv
+
+# app.config requires these; tests that don't use the real database fall back to safe defaults.
+load_dotenv()
 os.environ.setdefault("DATABASE_URL", "sqlite://")
-os.environ.setdefault("JWT_SECRET", "test-secret-at-least-32-bytes-long!!")
+os.environ.setdefault("JWT_SECRET", "test-secret")
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
-from app import access, readings  # noqa: F401  (registers their tables on Base)
-from app.db import Base, get_db
-from app.deps import get_current_user
-from app.main import app
-from app.models import Role, User
-from app.security import hash_password
+from app.db import Base, get_db  # noqa: E402
+from app.deps import get_current_user  # noqa: E402
+from app.main import app  # noqa: E402
+from app.models import Role, User  # noqa: E402
 
 engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 TestingSessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
-
-DEMO_PASSWORD = "Demo-Pass-123"
-TEST_USERS = {
-    "patient1": ("Maya Chen", "maya.chen@example.com", Role.patient),
-    "patient2": ("Daniel Okafor", "daniel.okafor@example.com", Role.patient),
-    "professional": ("Dr. Lee", "dr.lee@example.com", Role.professional),
-    "professional2": ("Dr. Singh", "dr.singh@example.com", Role.professional),
-}
 
 
 def override_get_db():
@@ -37,41 +30,34 @@ def override_get_db():
         db.close()
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def setup_db():
+    """In-memory database with test users; used by the readings tests (not test_auth.py)."""
     Base.metadata.create_all(engine)
     app.dependency_overrides[get_db] = override_get_db
-    yield
+    with TestingSessionLocal() as db:
+        users = {
+            "patient1": User(email="p1@example.com", password_hash="x", full_name="Patient One", role=Role.patient),
+            "patient2": User(email="p2@example.com", password_hash="x", full_name="Patient Two", role=Role.patient),
+            "professional": User(email="dr@example.com", password_hash="x", full_name="Dr. Test", role=Role.professional),
+            "professional2": User(email="dr2@example.com", password_hash="x", full_name="Dr. Other", role=Role.professional),
+        }
+        db.add_all(users.values())
+        db.commit()
+    yield users
     app.dependency_overrides.clear()
     Base.metadata.drop_all(engine)
 
 
 @pytest.fixture
-def db_session():
+def db_session(setup_db):
     db = TestingSessionLocal()
     yield db
     db.close()
 
 
-PASSWORD_HASH = hash_password(DEMO_PASSWORD)  # hashed once; bcrypt is slow on purpose
-
-
-@pytest.fixture(autouse=True)
-def users(setup_db):
-    """Real user rows (patients and professionals) so foreign keys and name lookups work."""
-    password_hash = PASSWORD_HASH
-    with TestingSessionLocal() as db:
-        created = {
-            key: User(full_name=name, email=email, role=role, password_hash=password_hash)
-            for key, (name, email, role) in TEST_USERS.items()
-        }
-        db.add_all(created.values())
-        db.commit()
-    return created
-
-
 def _client_as(user: User) -> TestClient:
-    # Not used as a context manager, so no app lifespan runs.
+    # Not used as a context manager, so the app lifespan (create_all on the real database) does not run.
     client = TestClient(app)
 
     # Set the user on every request so several client fixtures can be used in one test.
@@ -83,20 +69,26 @@ def _client_as(user: User) -> TestClient:
 
 
 @pytest.fixture
-def patient1_client(users):
-    return _client_as(users["patient1"])
+def patient1_client(setup_db):
+    return _client_as(setup_db["patient1"])
 
 
 @pytest.fixture
-def patient2_client(users):
-    return _client_as(users["patient2"])
+def patient2_client(setup_db):
+    return _client_as(setup_db["patient2"])
 
 
 @pytest.fixture
-def professional_client(users):
-    return _client_as(users["professional"])
+def professional_client(setup_db):
+    return _client_as(setup_db["professional"])
 
 
 @pytest.fixture
-def professional2_client(users):
-    return _client_as(users["professional2"])
+def professional2_client(setup_db):
+    return _client_as(setup_db["professional2"])
+
+
+@pytest.fixture
+def users(setup_db):
+    """Alias for the test users dict (used by the AUTH-2 / MON-1 tests)."""
+    return setup_db

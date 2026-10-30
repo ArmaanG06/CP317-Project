@@ -111,7 +111,7 @@ def test_temperature_two_decimals_rejected(patient1_client):
 
 
 # --- Save ---
-def test_save_full_submission(patient1_client, db_session, users):
+def test_save_full_submission(patient1_client, db_session, setup_db):
     r = patient1_client.post("/readings", json=FULL)
     assert r.status_code == 201
     body = r.json()
@@ -126,7 +126,7 @@ def test_save_full_submission(patient1_client, db_session, users):
 
     rows = db_session.scalars(select(Reading)).all()
     assert len(rows) == 5
-    assert {row.patient_id for row in rows} == {users["patient1"].id}
+    assert {row.patient_id for row in rows} == {setup_db["patient1"].id}
 
 
 def test_save_heart_rate_only(patient1_client, db_session):

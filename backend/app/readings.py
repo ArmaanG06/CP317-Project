@@ -5,8 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import AfterValidator, BaseModel, ConfigDict, field_validator, model_validator
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, func, select
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Uuid, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
@@ -33,9 +32,7 @@ class Reading(Base):
     __table_args__ = (Index("ix_readings_patient_vital_time", "patient_id", "vital_type", "recorded_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    patient_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
-    )
+    patient_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
     vital_type: Mapped[str] = mapped_column(String(20))
     value: Mapped[float] = mapped_column(Float)
     unit: Mapped[str] = mapped_column(String(10))

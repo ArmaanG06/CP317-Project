@@ -21,7 +21,7 @@ from app.readings import LatestReading, UTCDatetime, get_latest
 
 def patient_dashboard_path(patient_id: uuid.UUID) -> str:
     """Frontend route for a patient's dashboard. Keep in sync with the React router."""
-    return f"/patients/{patient_id}"
+    return f"/professional/patients/{patient_id}"
 
 
 # --- Schemas ---

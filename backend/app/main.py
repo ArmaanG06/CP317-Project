@@ -1,13 +1,24 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import monitoring, readings
+from app import monitoring, profiles, readings
 from app.config import FRONTEND_ORIGIN
+from app.db import Base, engine
 from app.routers import auth
 
-app = FastAPI(title="Health Monitor API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Creates missing tables (users, readings, profiles, patient_assignments) on startup. Can be replaced with migrations later.
+    Base.metadata.create_all(engine)
+    yield
+
+
+app = FastAPI(title="Health Monitor API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -16,6 +27,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
@@ -36,6 +48,7 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 
 app.include_router(auth.router)
 app.include_router(readings.router)
+app.include_router(profiles.router)
 app.include_router(monitoring.router)
 
 

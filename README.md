@@ -37,33 +37,39 @@ Patients submit vital signs and view their most recent values. Code lives in `ba
 `field` is `null` for form-level errors (e.g. "Enter at least one vital sign.").
 
 **Notes for teammates**
-- **Auth:** `backend/app/deps.py` `get_current_user()` is a placeholder returning patient `DEV_PATIENT_ID`. Replace its body with real session/JWT verification; endpoints don't need to change. The patient ID always comes from the logged-in user, never the request, and non-patients get 403.
-- **Database:** the `readings` table stores one row per vital value (blood pressure is two rows linked by `submission_id`), with UTC `recorded_at` and an index on `(patient_id, vital_type, recorded_at)`. `patient_id` needs a foreign key once the patients table exists. Tables are created on startup by `create_all`, which can be replaced with migrations.
+- **Auth:** both endpoints require a signed-in user (session cookie from `POST /auth/login`; 401 otherwise). The patient ID always comes from the logged-in user, never the request, and professionals get 403.
+- **Database:** the `readings` table stores one row per vital value (blood pressure is two rows linked by `submission_id`), with UTC `recorded_at` and an index on `(patient_id, vital_type, recorded_at)`. `patient_id` is a UUID foreign key to `users.id`. Tables are created on startup by `create_all`, which can be replaced with migrations.
+
+### User profiles (Armaan Gandhara)
+Patients and professionals view and update their own personal details on the **My profile** page (`/profile`). Code lives in `backend/app/profiles.py` and `frontend/src/pages/Profile.jsx`, tests in `backend/tests/test_profiles.py`.
+
+| Endpoint | Description |
+|---|---|
+| `GET /profile` | The signed-in user's profile (fields are `null` until first saved) |
+| `PUT /profile` | Create or replace the signed-in user's profile |
+
+Stored in the `profiles` table (one row per user, keyed by `users.id`): full legal name, preferred name, date of birth, sex (female/male/intersex), gender (free text), address (street, unit, city, province/territory, postal code) and contact details (phone, emergency contact name and phone). Postal codes and phone numbers are normalized (e.g. `N2L 3C5`, `(519) 555-0123`), and invalid input returns the same 422 `errors` format as readings. `python seed.py` creates all tables and fills in fictional profiles for every demo user.
 
 ### Roles and access control (Arica Ng: AUTH-2-T1, AUTH-2-T2, AUTH-2-T3)
 Server-side rules in `backend/app/access.py`, tests in `backend/tests/test_access.py`.
 
-- **Roles:** `patient` and `professional`, stored on the `users` table (AUTH-1) and read from the signed-in user.
-- **Assignments:** the `patient_assignments` table links a professional to the patients they may monitor (`professional_id`, `patient_id` as foreign keys to `users`, `assigned_at`, unique per pair). Create one with `assign_patient(db, professional_id, patient_id)`, which rejects accounts with the wrong role. `seed.py` assigns Maya Chen and Daniel Okafor to Dr. Lee for demos.
-- **Rule:** a patient can only access their own records; a professional can only access assigned patients; everyone else gets 403. Non-existent patient IDs also return 403 so IDs can't be probed.
+- **Roles:** `patient` and `professional`, stored on the `users` table and read from the signed-in user.
+- **Assignments:** the `patient_assignments` table links a professional to the patients they may monitor (`professional_id` and `patient_id` are UUID foreign keys to `users.id`; unique per pair). Create one with `assign_patient(db, professional_id, patient_id)`, which rejects accounts with the wrong role and skips pairs that already exist.
+- **Rule:** a patient can only access their own records; a professional can only access assigned patients; everyone else gets 403. Unknown patient IDs also return 403, so IDs can't be probed.
 - **Using it:** add `Depends(require_patient_access)` to any route with `{patient_id}` in its path, or `Depends(require_role(ROLE_PROFESSIONAL))` for professional-only routes.
 
 ### Professional roster (Arica Ng: MON-1-T1, MON-1-T2)
-Code in `backend/app/monitoring.py`, tests in `backend/tests/test_monitoring.py`.
+Backend in `backend/app/monitoring.py` (tests: `backend/tests/test_monitoring.py`); pages in `frontend/src/pages/ProfessionalRoster.jsx` and `ProfessionalPatientView.jsx` (tests: `ProfessionalRoster.test.jsx`).
 
 | Endpoint | Description |
 |---|---|
 | `GET /professionals/me/patients` | Signed-in professional's assigned patients, sorted by name: `patient_id`, `full_name`, `assigned_at`, `dashboard_path`. Empty list when none; 403 for patients |
-| `GET /patients/{patient_id}/readings/latest` | Latest vitals for one patient (same shape as `/readings/latest`); the roster links here. Patient themselves or an assigned professional only |
+| `GET /patients/{patient_id}/readings/latest` | Latest vitals for one patient (same shape as `/readings/latest`). The patient themselves or an assigned professional only |
 
-### Frontend: patient navigation and roster page (Arica Ng: UI-2-T1, UI-2-T2, MON-1 UI)
-React app in `frontend/` (Vite). `src/components/PatientNav.jsx` links Dashboard, Enter reading, History and Appointments, marks the current page with `aria-current="page"`, and is fully keyboard operable. `src/pages/ProfessionalRoster.jsx` lists assigned patients with loading, empty and error states and links each to `/patients/:patientId`. Pages owned by other stories are placeholders in `src/AppRoutes.jsx`; replace them as they land.
+**My patients** (`/professional`) lists the roster with loading, empty and error states. Each entry opens `/professional/patients/:patientId`, which shows that patient's latest readings with the same cards as the patient dashboard. `python seed.py` assigns demo patients: Dr. Lee (Maya, Daniel, Priya), Dr. Armaan Gandhara (Lucas, Hannah, Ethan) and Arica Ng (Zakir, Jenny). Jacob Habte has none, to show the empty state.
 
-**Integration with AUTH-1** (separate commit, so it's easy to review)
-- `readings.patient_id` is now a UUID foreign key to `users`, matching AUTH-1's user IDs.
-- Restored the 422 `{"errors": [...]}` handler in `main.py`; the AUTH-1 merge had removed it, which broke the readings error format.
-- `tests/conftest.py` creates real users (two patients, two professionals) and sets test `DATABASE_URL`/`JWT_SECRET`, so all tests, including the login tests, run without Supabase.
-- `seed.py` creates every table and the demo assignments; `.env.example` now includes `JWT_SECRET`.
+### Patient navigation (Arica Ng: UI-2-T1, UI-2-T2)
+The sidebar in `frontend/src/components/AppShell.jsx` links Dashboard, Record vitals, Trends & history, Appointments and My profile, and marks the current page (`aria-current="page"` plus highlight). Added a **Skip to main content** link as the first Tab stop so keyboard users can jump past the navigation. Tests in `frontend/src/components/AppShell.test.jsx` check one-click navigation between every pair of pages, a single current-page marker, Tab order, Enter to open, and the skip link.
 
 ## Running locally
 Setup instructions coming as the project is built.
@@ -75,15 +81,17 @@ python -m venv .venv
 .venv\Scripts\activate          # Windows
 source .venv/bin/activate       # macOS/Linux
 pip install -r requirements.txt
-cp .env.example .env            # Windows: copy .env.example .env
+cp .env.example .env            # Windows: copy .env.example .env, then fill in DATABASE_URL and JWT_SECRET
+python seed.py                  # optional: add demo users (password Demo-Pass-123)
 uvicorn app.main:app --reload   # API at http://127.0.0.1:8000, docs at http://127.0.0.1:8000/docs
 pytest -q                       # run tests
 ```
+`tests/test_auth.py` uses the real database and the seeded demo users, so it needs a filled-in `.env` and `python seed.py`. The readings tests use an in-memory database and run without one.
 
 ### Frontend
-From `frontend/` (start the backend first; Vite forwards `/api/...` to it):
+From `frontend/` (start the backend first):
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # run tests
+npm test         # run tests (Vitest; the API is faked, no backend needed)
 ```

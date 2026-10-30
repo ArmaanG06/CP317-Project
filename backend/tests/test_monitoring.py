@@ -17,7 +17,7 @@ def test_roster_lists_only_my_patients(professional_client, professional2_client
     assign_patient(db_session, users["professional2"].id, users["patient2"].id)
 
     mine = professional_client.get("/professionals/me/patients").json()
-    assert [row["full_name"] for row in mine] == ["Daniel Okafor", "Maya Chen"]  # sorted by name
+    assert [row["full_name"] for row in mine] == ["Patient One", "Patient Two"]  # sorted by name
 
     theirs = professional2_client.get("/professionals/me/patients").json()
     assert [row["patient_id"] for row in theirs] == [str(users["patient2"].id)]
@@ -28,7 +28,7 @@ def test_roster_entries_link_to_correct_dashboard(professional_client, db_sessio
     assign_patient(db_session, users["professional"].id, patient_id)
     entry = professional_client.get("/professionals/me/patients").json()[0]
     assert entry["patient_id"] == str(patient_id)
-    assert entry["dashboard_path"] == f"/patients/{patient_id}"
+    assert entry["dashboard_path"] == f"/professional/patients/{patient_id}"
     assert datetime.fromisoformat(entry["assigned_at"]).utcoffset() == timedelta(0)
 
 
@@ -37,7 +37,7 @@ def test_roster_link_opens_that_patients_data(patient1_client, professional_clie
     patient1_client.post("/readings", json={"heart_rate": 64})
 
     entry = professional_client.get("/professionals/me/patients").json()[0]
-    r = professional_client.get(f"{entry['dashboard_path']}/readings/latest")
+    r = professional_client.get(f"/patients/{entry['patient_id']}/readings/latest")
     assert r.status_code == 200
     assert {row["vital_type"]: row["value"] for row in r.json()}["heart_rate"] == 64
 

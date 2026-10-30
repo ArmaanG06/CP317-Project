@@ -1,80 +1,82 @@
-// MON-1-T2: roster entries link to the right patient dashboard; empty and error states.
-import { render, screen } from "@testing-library/react";
+// MON-1-T2: roster entries link to the correct patient dashboard; assignments and empty states.
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it, vi } from "vitest";
-
-import AppRoutes from "../AppRoutes.jsx";
-
-function mockFetch(status, body) {
-  return vi.spyOn(globalThis, "fetch").mockResolvedValue({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  });
-}
-
-function renderRoster() {
-  render(
-    <MemoryRouter initialEntries={["/roster"]}>
-      <AppRoutes />
-    </MemoryRouter>,
-  );
-}
+import { describe, expect, it } from "vitest";
+import { mockApi, PATIENT, PROFESSIONAL, renderApp } from "../test/renderApp";
 
 const MAYA = "8cbfce12-7d92-48b0-96cb-eac3b00cf321";
 const DANIEL = "4787dbdd-d66c-4dc8-a034-5521b447f10e";
-const ROSTER = [
-  { patient_id: DANIEL, full_name: "Daniel Okafor", assigned_at: "2026-10-01T12:00:00Z", dashboard_path: `/patients/${DANIEL}` },
-  { patient_id: MAYA, full_name: "Maya Chen", assigned_at: "2026-10-02T12:00:00Z", dashboard_path: `/patients/${MAYA}` },
+const entry = (id, name) => ({
+  patient_id: id,
+  full_name: name,
+  assigned_at: "2026-10-01T12:00:00Z",
+  dashboard_path: `/professional/patients/${id}`,
+});
+const ROSTER = [entry(DANIEL, "Daniel Okafor"), entry(MAYA, "Maya Chen")];
+const MAYA_LATEST = [
+  { vital_type: "heart_rate", unit: "bpm", value: 64, recorded_at: "2026-10-29T14:00:00Z", available: true, message: null },
 ];
 
-describe("Professional roster", () => {
-  it("requests the signed-in professional's roster", async () => {
-    const fetchSpy = mockFetch(200, []);
-    renderRoster();
-    await screen.findByText("No patients are assigned to you yet.");
-    expect(fetchSpy).toHaveBeenCalledWith("/api/professionals/me/patients", { credentials: "include" });
-  });
-
-  it("shows a loading state first", () => {
-    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => {}));
-    renderRoster();
-    expect(screen.getByRole("status")).toHaveTextContent("Loading patients");
+describe("Professional roster (MON-1)", () => {
+  it("shows the assigned patients, each linking to their dashboard", async () => {
+    mockApi(PROFESSIONAL, { "/professionals/me/patients": ROSTER });
+    renderApp("/professional");
+    const list = within(await screen.findByRole("list", { name: "Assigned patients" }));
+    const links = list.getAllByRole("link");
+    expect(links.map((a) => a.textContent)).toEqual([
+      expect.stringContaining("Daniel Okafor"),
+      expect.stringContaining("Maya Chen"),
+    ]);
+    expect(links.map((a) => a.getAttribute("href"))).toEqual([
+      `/professional/patients/${DANIEL}`,
+      `/professional/patients/${MAYA}`,
+    ]);
   });
 
   it("shows an empty state when no patients are assigned", async () => {
-    mockFetch(200, []);
-    renderRoster();
-    expect(await screen.findByText("No patients are assigned to you yet.")).toBeInTheDocument();
+    mockApi(PROFESSIONAL, { "/professionals/me/patients": [] });
+    renderApp("/professional");
+    expect(await screen.findByText("No patients assigned yet")).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Assigned patients" })).not.toBeInTheDocument();
   });
 
-  it("lists only the patients the API returns, each linking to its dashboard", async () => {
-    mockFetch(200, ROSTER);
-    renderRoster();
-    const links = await screen.findAllByRole("link");
-    expect(links.map((a) => a.textContent)).toEqual(["Daniel Okafor", "Maya Chen"]);
-    expect(links.map((a) => a.getAttribute("href"))).toEqual([`/patients/${DANIEL}`, `/patients/${MAYA}`]);
+  it("shows a loading state first", async () => {
+    mockApi(PROFESSIONAL, { "/professionals/me/patients": ROSTER });
+    renderApp("/professional");
+    expect(await screen.findByRole("status")).toHaveTextContent("Loading patients");
   });
 
-  it("opens the selected patient's dashboard", async () => {
-    mockFetch(200, ROSTER);
+  it("opens the selected patient's dashboard with their readings", async () => {
+    mockApi(PROFESSIONAL, {
+      "/professionals/me/patients": ROSTER,
+      [`/patients/${MAYA}/readings/latest`]: MAYA_LATEST,
+    });
     const user = userEvent.setup();
-    renderRoster();
-    await user.click(await screen.findByRole("link", { name: "Maya Chen" }));
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Patient dashboard");
+    renderApp("/professional");
+    await user.click(await screen.findByRole("link", { name: /Maya Chen/ }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Maya Chen" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Heart rate" })).getByText("64")).toBeInTheDocument();
   });
 
-  it("explains a 403 to non-professionals", async () => {
-    mockFetch(403, { detail: "Only professionals can use this feature." });
-    renderRoster();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Only health professionals");
+  it("explains when a professional opens an unassigned patient's URL directly", async () => {
+    mockApi(PROFESSIONAL, {
+      "/professionals/me/patients": ROSTER,
+      "/patients/someone-else/readings/latest": [403, { detail: "You do not have access to this patient's records." }],
+    });
+    renderApp("/professional/patients/someone-else");
+    expect(await screen.findByRole("alert")).toHaveTextContent("isn’t assigned to you");
   });
 
-  it("shows a generic error when the request fails", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("network down"));
-    renderRoster();
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not load your patients");
+  it("shows a retry option when the roster fails to load", async () => {
+    mockApi(PROFESSIONAL, { "/professionals/me/patients": [500, { detail: "Server error" }] });
+    renderApp("/professional");
+    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn’t load your patients");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+  });
+
+  it("keeps patients out of the professional pages", async () => {
+    mockApi(PATIENT);
+    renderApp("/professional");
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(/Good (morning|afternoon|evening), Maya/);
   });
 });
