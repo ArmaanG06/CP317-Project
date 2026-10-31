@@ -32,7 +32,7 @@ def override_get_db():
 
 @pytest.fixture
 def setup_db():
-    """In-memory database with three users; used by the readings tests (not test_auth.py)."""
+    """In-memory database with test users; used by the readings tests (not test_auth.py)."""
     Base.metadata.create_all(engine)
     app.dependency_overrides[get_db] = override_get_db
     with TestingSessionLocal() as db:
@@ -40,6 +40,7 @@ def setup_db():
             "patient1": User(email="p1@example.com", password_hash="x", full_name="Patient One", role=Role.patient),
             "patient2": User(email="p2@example.com", password_hash="x", full_name="Patient Two", role=Role.patient),
             "professional": User(email="dr@example.com", password_hash="x", full_name="Dr. Test", role=Role.professional),
+            "professional2": User(email="dr2@example.com", password_hash="x", full_name="Dr. Other", role=Role.professional),
         }
         db.add_all(users.values())
         db.commit()
@@ -80,3 +81,14 @@ def patient2_client(setup_db):
 @pytest.fixture
 def professional_client(setup_db):
     return _client_as(setup_db["professional"])
+
+
+@pytest.fixture
+def professional2_client(setup_db):
+    return _client_as(setup_db["professional2"])
+
+
+@pytest.fixture
+def users(setup_db):
+    """Alias for the test users dict (used by the AUTH-2 / MON-1 tests)."""
+    return setup_db

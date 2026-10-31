@@ -1,9 +1,11 @@
-import { Calendar, ChartLine, Users } from "lucide-react";
+import { Calendar, ChartLine } from "lucide-react";
 import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import AppShell from "./components/AppShell";
 import ComingSoon from "./pages/ComingSoon";
 import PatientDashboard from "./pages/PatientDashboard";
+import ProfessionalPatientView from "./pages/ProfessionalPatientView";
+import ProfessionalRoster from "./pages/ProfessionalRoster";
 import Profile from "./pages/Profile";
 import RecordVitals from "./pages/RecordVitals";
 import SignIn from "./pages/SignIn";
@@ -61,17 +63,8 @@ export default function App() {
             />
           </Route>
           <Route element={<RequireRole role="professional" />}>
-            <Route
-              path="/professional"
-              element={
-                <ComingSoon
-                  title="My patients"
-                  subtitle="Review the patients assigned to you."
-                  Icon={Users}
-                  message="Your patient roster will appear here once the backend can tell which patients are assigned to you."
-                />
-              }
-            />
+            <Route path="/professional" element={<ProfessionalRoster />} />
+            <Route path="/professional/patients/:patientId" element={<ProfessionalPatientView />} />
           </Route>
         </Route>
       </Route>

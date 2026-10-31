@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import profiles, readings
+from app import monitoring, profiles, readings
 from app.config import FRONTEND_ORIGIN
 from app.db import Base, engine
 from app.routers import auth
@@ -13,7 +13,7 @@ from app.routers import auth
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Creates missing tables (users, readings, profiles) on startup. Can be replaced with migrations later.
+    # Creates missing tables (users, readings, profiles, patient_assignments) on startup. Can be replaced with migrations later.
     Base.metadata.create_all(engine)
     yield
 
@@ -49,6 +49,7 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
 app.include_router(auth.router)
 app.include_router(readings.router)
 app.include_router(profiles.router)
+app.include_router(monitoring.router)
 
 
 @app.get("/health")

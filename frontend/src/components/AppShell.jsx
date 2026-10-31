@@ -26,6 +26,13 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen">
+      {/* UI-2: first Tab stop on every page, so keyboard users can jump past the navigation. Hidden until focused. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-full focus:bg-card focus:px-5 focus:py-3 focus:font-medium focus:text-primary-dark focus:shadow-card focus:outline-3 focus:outline-accent"
+      >
+        Skip to main content
+      </a>
       <aside className="flex w-[260px] shrink-0 flex-col gap-2 bg-nav px-5 py-7">
         <div aria-hidden="true" className="mb-2 flex size-10 items-center justify-center rounded-full bg-primary">
           <Heart size={22} className="text-white" />
@@ -72,7 +79,7 @@ export default function AppShell() {
             </div>
           </div>
         </header>
-        <main className="flex flex-col gap-6 px-8 pb-8">
+        <main id="main-content" tabIndex={-1} className="flex flex-col gap-6 px-8 pb-8 focus:outline-none">
           <Outlet />
         </main>
       </div>

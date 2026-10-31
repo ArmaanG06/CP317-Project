@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
-from app import models, readings  # noqa: F401  (registers every table for create_all)
+from app import access, models, readings  # noqa: F401  (registers every table for create_all)
+from app.access import assign_patient
 from app.db import Base, SessionLocal, engine
 from app.models import Role, User
 from app.profiles import Profile, ProfileUpdate, save_profile
@@ -33,6 +34,14 @@ USERS = [
     ("Toaster Strudelman", "toaster.strudelman@example.com", Role.patient),
     ("Dr. Dingle Fritz", "dingle.fritz@example.com", Role.professional),
 ]
+
+
+# MON-1 demo assignments (professional -> patients). Jacob Habte is left with none, to demo the empty roster.
+ASSIGNMENTS = {
+    "dr.lee@example.com": ["maya.chen@example.com", "daniel.okafor@example.com", "priya.raman@example.com"],
+    "armaan.gandhara@example.com": ["lucas.bouchard@example.com", "hannah.weiss@example.com", "ethan.tremblay@example.com"],
+    "arica.ng@example.com": ["zakir.hasham@example.com", "jenny.wang@example.com"],
+}
 
 
 def profile(legal, preferred, dob, sex, street, city, province, postal, phone, contact=None, contact_phone=None):
@@ -72,7 +81,7 @@ PROFILES = {
 
 
 def main():
-    Base.metadata.create_all(engine)  # creates the users, readings and profiles tables if missing
+    Base.metadata.create_all(engine)  # creates the users, readings, profiles and patient_assignments tables if missing
     with SessionLocal() as db:
         for name, email, role in USERS:
             if db.scalar(select(User).where(User.email == email)):
@@ -88,6 +97,13 @@ def main():
                 continue
             save_profile(db, user.id, ProfileUpdate(**fields))  # same validation as the API
             print("profile added:", email)
+
+        for pro_email, patient_emails in ASSIGNMENTS.items():
+            pro = db.scalar(select(User).where(User.email == pro_email))
+            for patient_email in patient_emails:
+                patient = db.scalar(select(User).where(User.email == patient_email))
+                assign_patient(db, pro.id, patient.id)  # skips pairs that already exist
+                print("assigned:", patient_email, "->", pro_email)
 
 
 if __name__ == "__main__":

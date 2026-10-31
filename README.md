@@ -50,6 +50,27 @@ Patients and professionals view and update their own personal details on the **M
 
 Stored in the `profiles` table (one row per user, keyed by `users.id`): full legal name, preferred name, date of birth, sex (female/male/intersex), gender (free text), address (street, unit, city, province/territory, postal code) and contact details (phone, emergency contact name and phone). Postal codes and phone numbers are normalized (e.g. `N2L 3C5`, `(519) 555-0123`), and invalid input returns the same 422 `errors` format as readings. `python seed.py` creates all tables and fills in fictional profiles for every demo user.
 
+### Roles and access control (Arica Ng: AUTH-2-T1, AUTH-2-T2, AUTH-2-T3)
+Server-side rules in `backend/app/access.py`, tests in `backend/tests/test_access.py`.
+
+- **Roles:** `patient` and `professional`, stored on the `users` table and read from the signed-in user.
+- **Assignments:** the `patient_assignments` table links a professional to the patients they may monitor (`professional_id` and `patient_id` are UUID foreign keys to `users.id`; unique per pair). Create one with `assign_patient(db, professional_id, patient_id)`, which rejects accounts with the wrong role and skips pairs that already exist.
+- **Rule:** a patient can only access their own records; a professional can only access assigned patients; everyone else gets 403. Unknown patient IDs also return 403, so IDs can't be probed.
+- **Using it:** add `Depends(require_patient_access)` to any route with `{patient_id}` in its path, or `Depends(require_role(ROLE_PROFESSIONAL))` for professional-only routes.
+
+### Professional roster (Arica Ng: MON-1-T1, MON-1-T2)
+Backend in `backend/app/monitoring.py` (tests: `backend/tests/test_monitoring.py`); pages in `frontend/src/pages/ProfessionalRoster.jsx` and `ProfessionalPatientView.jsx` (tests: `ProfessionalRoster.test.jsx`).
+
+| Endpoint | Description |
+|---|---|
+| `GET /professionals/me/patients` | Signed-in professional's assigned patients, sorted by name: `patient_id`, `full_name`, `assigned_at`, `dashboard_path`. Empty list when none; 403 for patients |
+| `GET /patients/{patient_id}/readings/latest` | Latest vitals for one patient (same shape as `/readings/latest`). The patient themselves or an assigned professional only |
+
+**My patients** (`/professional`) lists the roster with loading, empty and error states. Each entry opens `/professional/patients/:patientId`, which shows that patient's latest readings with the same cards as the patient dashboard. `python seed.py` assigns demo patients: Dr. Lee (Maya, Daniel, Priya), Dr. Armaan Gandhara (Lucas, Hannah, Ethan) and Arica Ng (Zakir, Jenny). Jacob Habte has none, to show the empty state.
+
+### Patient navigation (Arica Ng: UI-2-T1, UI-2-T2)
+The sidebar in `frontend/src/components/AppShell.jsx` links Dashboard, Record vitals, Trends & history, Appointments and My profile, and marks the current page (`aria-current="page"` plus highlight). Added a **Skip to main content** link as the first Tab stop so keyboard users can jump past the navigation. Tests in `frontend/src/components/AppShell.test.jsx` check one-click navigation between every pair of pages, a single current-page marker, Tab order, Enter to open, and the skip link.
+
 ## Running locally
 Setup instructions coming as the project is built.
 
@@ -66,3 +87,11 @@ uvicorn app.main:app --reload   # API at http://127.0.0.1:8000, docs at http://1
 pytest -q                       # run tests
 ```
 `tests/test_auth.py` uses the real database and the seeded demo users, so it needs a filled-in `.env` and `python seed.py`. The readings tests use an in-memory database and run without one.
+
+### Frontend
+From `frontend/` (start the backend first):
+```bash
+npm install
+npm run dev      # http://localhost:5173
+npm test         # run tests (Vitest; the API is faked, no backend needed)
+```
