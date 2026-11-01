@@ -20,9 +20,9 @@ USERS = [
     ("Noah MacDonald", "noah.macdonald@example.com", Role.patient),
     # Group 19 team members
     ("Dr. Armaan Gandhara", "armaan.gandhara@example.com", Role.professional),  # head doctor
-    ("Jacob Habte", "jacob.habte@example.com", Role.professional),
-    ("Zakir Hasham", "zakir.hasham@example.com", Role.patient),
-    ("Arica Ng", "arica.ng@example.com", Role.professional),
+    ("Jacob Habte", "jacob.habte@example.com", Role.patient),
+    ("Dr. Zakir Hasham", "zakir.hasham@example.com", Role.professional),
+    ("Arica Ng", "arica.ng@example.com", Role.patient),
     ("Jenny Wang", "jenny.wang@example.com", Role.patient),
     # Joke demo users
     ("Fih", "fih@example.com", Role.patient),
@@ -36,11 +36,11 @@ USERS = [
 ]
 
 
-# MON-1 demo assignments (professional -> patients). Jacob Habte is left with none, to demo the empty roster.
+# MON-1 demo assignments (professional -> patients). Dr. Dingle Fritz is left with none, to demo the empty roster.
 ASSIGNMENTS = {
     "dr.lee@example.com": ["maya.chen@example.com", "daniel.okafor@example.com", "priya.raman@example.com"],
     "armaan.gandhara@example.com": ["lucas.bouchard@example.com", "hannah.weiss@example.com", "ethan.tremblay@example.com"],
-    "arica.ng@example.com": ["zakir.hasham@example.com", "jenny.wang@example.com"],
+    "zakir.hasham@example.com": ["arica.ng@example.com", "jenny.wang@example.com"],
 }
 
 
