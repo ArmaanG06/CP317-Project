@@ -1,3 +1,7 @@
+import random
+import uuid
+from datetime import datetime, time, timedelta, timezone
+
 from sqlalchemy import select
 
 from app import access, models, readings  # noqa: F401  (registers every table for create_all)
@@ -5,6 +9,7 @@ from app.access import assign_patient
 from app.db import Base, SessionLocal, engine
 from app.models import Role, User
 from app.profiles import Profile, ProfileUpdate, save_profile
+from app.readings import VITAL_LIMITS, Reading
 from app.security import hash_password
 
 DEMO_PASSWORD = "Demo-Pass-123"  # fake demo data only
@@ -42,6 +47,50 @@ ASSIGNMENTS = {
     "armaan.gandhara@example.com": ["lucas.bouchard@example.com", "hannah.weiss@example.com", "ethan.tremblay@example.com"],
     "zakir.hasham@example.com": ["arica.ng@example.com", "jenny.wang@example.com"],
 }
+
+# TR_REP-1 / MON-2 demo history: about 30 days of morning and evening readings for these patients.
+# Values are fictional. Each (day, vital, value) override is an out-of-range reading for ALT-2 flags to catch.
+# Rows are marked source="demo_seed"; remove them with: DELETE FROM readings WHERE source = 'demo_seed';
+DEMO_DAYS = 30
+DEMO_READINGS = {
+    # email: (baseline heart rate, systolic, diastolic, temperature, SpO2), overrides
+    "maya.chen@example.com": ((72, 118, 76, 36.7, 98), [(5, "heart_rate", 118)]),
+    "daniel.okafor@example.com": ((78, 132, 84, 36.8, 97), [(9, "systolic", 152), (9, "diastolic", 96)]),
+    "priya.raman@example.com": ((68, 112, 72, 36.6, 98), [(3, "temperature", 38.6)]),
+    "lucas.bouchard@example.com": ((75, 126, 82, 36.8, 97), [(12, "systolic", 148), (12, "diastolic", 95)]),
+    "hannah.weiss@example.com": ((70, 110, 70, 36.5, 98), [(7, "spo2", 90)]),
+    "ethan.tremblay@example.com": ((64, 120, 78, 36.7, 99), [(15, "heart_rate", 48)]),
+    "arica.ng@example.com": ((74, 116, 74, 36.6, 98), []),
+    "jenny.wang@example.com": ((71, 114, 73, 36.7, 98), [(20, "temperature", 38.2)]),
+}
+
+
+def demo_readings(patient_id, baseline, overrides, now):
+    """Readings at about 8:00 and 20:00 UTC for the last DEMO_DAYS days, none in the future."""
+    rng = random.Random(str(patient_id))  # same values every time for the same patient
+    spread = {"heart_rate": 6, "systolic": 7, "diastolic": 5, "temperature": 0.3, "spo2": 1}
+    special = {(day, vital): value for day, vital, value in overrides}
+    rows = []
+    for days_ago in range(DEMO_DAYS - 1, -1, -1):
+        for hour in (8, 20):
+            when = datetime.combine(now.date() - timedelta(days=days_ago), time(hour, rng.randrange(60)), timezone.utc)
+            if when > now:
+                continue
+            submission_id = str(uuid.uuid4())
+            for vital, base in zip(spread, baseline):
+                value = special.get((days_ago, vital)) if hour == 8 else None
+                if value is None:
+                    value = base + rng.uniform(-1, 1) * spread[vital]
+                limits = VITAL_LIMITS[vital]
+                value = min(max(value, limits["min"]), limits["max"])
+                value = round(value, 1) if vital == "temperature" else round(value)
+                if vital == "spo2":
+                    value = min(value, 100)
+                rows.append(Reading(
+                    patient_id=patient_id, vital_type=vital, value=float(value), unit=limits["unit"],
+                    recorded_at=when, submission_id=submission_id, source="demo_seed",
+                ))
+    return rows
 
 
 def profile(legal, preferred, dob, sex, street, city, province, postal, phone, contact=None, contact_phone=None):
@@ -104,6 +153,18 @@ def main():
                 patient = db.scalar(select(User).where(User.email == patient_email))
                 assign_patient(db, pro.id, patient.id)  # skips pairs that already exist
                 print("assigned:", patient_email, "->", pro_email)
+
+        now = datetime.now(timezone.utc)
+        for email, (baseline, overrides) in DEMO_READINGS.items():
+            patient = db.scalar(select(User).where(User.email == email))
+            if patient is None:
+                continue
+            if db.scalar(select(Reading.id).where(Reading.patient_id == patient.id, Reading.source == "demo_seed").limit(1)):
+                continue  # already has demo history
+            rows = demo_readings(patient.id, baseline, overrides, now)
+            db.add_all(rows)
+            db.commit()
+            print(f"demo readings added: {email} ({len(rows)} values)")
 
 
 if __name__ == "__main__":

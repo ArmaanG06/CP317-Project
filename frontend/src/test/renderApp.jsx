@@ -20,6 +20,7 @@ export function mockApi(user, routes = {}) {
       return Array.isArray(r) && typeof r[0] === "number" ? json(r[0], r[1]) : json(200, r);
     }
     if (path === "/readings/latest") return json(200, []);
+    if (path.endsWith("/readings/history")) return json(200, { start: "", end: "", readings: [] });
     return json(404, { detail: "Not found" });
   });
 }

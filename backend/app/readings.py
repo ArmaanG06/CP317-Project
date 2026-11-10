@@ -1,9 +1,9 @@
 import math
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import AfterValidator, BaseModel, ConfigDict, field_validator, model_validator
 from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Uuid, func, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
@@ -22,6 +22,10 @@ VITAL_LIMITS = {
     "spo2": {"unit": "%", "min": 50, "max": 100, "label": "SpO2"},
 }
 VITAL_ORDER = ["heart_rate", "systolic", "diastolic", "temperature", "spo2"]
+
+# Trend history window (TR_REP-1): used when no period is given, and the longest period allowed.
+DEFAULT_HISTORY_DAYS = 30
+MAX_HISTORY_DAYS = 366
 
 
 # --- Model ---
@@ -112,6 +116,42 @@ class LatestReading(BaseModel):
     message: str | None
 
 
+class HistoryQuery(BaseModel):
+    """Time period for trends (TR_REP-1). Both ends are inclusive; times without a timezone are read as UTC."""
+
+    start: datetime | None = None
+    end: datetime | None = None
+
+    @field_validator("start", "end", mode="before")
+    @classmethod
+    def parse_time(cls, v, info):
+        if v is None or v == "":
+            return None
+        try:
+            parsed = datetime.fromisoformat(v) if isinstance(v, str) else None
+        except ValueError:
+            parsed = None
+        if parsed is None:
+            raise ValueError(f"Enter the {info.field_name} as a date and time, like 2026-11-01T00:00:00Z.")
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def fill_and_check(self):
+        self.end = self.end or utcnow()
+        self.start = self.start or self.end - timedelta(days=DEFAULT_HISTORY_DAYS)
+        if self.start > self.end:
+            raise ValueError("The start of the time period must be before the end.")
+        if self.end - self.start > timedelta(days=MAX_HISTORY_DAYS):
+            raise ValueError(f"Choose a time period of {MAX_HISTORY_DAYS} days or less.")
+        return self
+
+
+class ReadingHistory(BaseModel):
+    start: UTCDatetime
+    end: UTCDatetime
+    readings: list[ReadingOut]
+
+
 # --- Logic ---
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -170,6 +210,20 @@ def get_latest(db: Session, patient_id: uuid.UUID) -> list[LatestReading]:
     return result
 
 
+def get_history(db: Session, patient_id: uuid.UUID, period: HistoryQuery) -> ReadingHistory:
+    """Every saved value in the period, oldest first, for trend charts."""
+    rows = db.scalars(
+        select(Reading)
+        .where(
+            Reading.patient_id == patient_id,
+            Reading.recorded_at >= period.start,
+            Reading.recorded_at <= period.end,
+        )
+        .order_by(Reading.recorded_at, Reading.id)
+    )
+    return ReadingHistory(start=period.start, end=period.end, readings=[ReadingOut.model_validate(r) for r in rows])
+
+
 # --- Routes ---
 router = APIRouter(prefix="/readings", tags=["readings"])
 
@@ -197,3 +251,13 @@ def latest_readings(
 ):
     _require_patient(user)
     return get_latest(db, user.id)
+
+
+@router.get("/history", response_model=ReadingHistory)
+def reading_history(
+    period: Annotated[HistoryQuery, Query()],
+    user: CurrentUser,
+    db: Session = Depends(get_db),
+):
+    _require_patient(user)
+    return get_history(db, user.id, period)

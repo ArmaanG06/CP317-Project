@@ -4,11 +4,15 @@ GET /professionals/me/patients        roster for the signed-in professional (MON
 GET /patients/{patient_id}/readings/latest
                                       a patient's latest vitals; the roster links here (MON-1-T2).
                                       Protected by AUTH-2: the patient themselves or an assigned professional.
+GET /patients/{patient_id}/readings/history
+                                      a patient's readings over a time period, for trends (MON-2).
+                                      Same AUTH-2 protection.
 """
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.access import ROLE_PROFESSIONAL, PatientAssignment, require_patient_access, require_role
 from app.db import get_db
 from app.models import User
-from app.readings import LatestReading, UTCDatetime, get_latest
+from app.readings import HistoryQuery, LatestReading, ReadingHistory, UTCDatetime, get_history, get_latest
 
 
 def patient_dashboard_path(patient_id: uuid.UUID) -> str:
@@ -68,3 +72,13 @@ def patient_latest_readings(
     db: Session = Depends(get_db),
 ):
     return get_latest(db, patient_id)
+
+
+@router.get("/patients/{patient_id}/readings/history", response_model=ReadingHistory)
+def patient_reading_history(
+    patient_id: uuid.UUID,
+    period: Annotated[HistoryQuery, Query()],
+    _user: User = Depends(require_patient_access),
+    db: Session = Depends(get_db),
+):
+    return get_history(db, patient_id, period)

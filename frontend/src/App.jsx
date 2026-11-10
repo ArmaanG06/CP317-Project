@@ -1,5 +1,5 @@
-import { Calendar, ChartLine } from "lucide-react";
-import { Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Calendar } from "lucide-react";
+import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import AppShell from "./components/AppShell";
 import ComingSoon from "./pages/ComingSoon";
@@ -9,6 +9,7 @@ import ProfessionalRoster from "./pages/ProfessionalRoster";
 import Profile from "./pages/Profile";
 import RecordVitals from "./pages/RecordVitals";
 import SignIn from "./pages/SignIn";
+import Trends from "./pages/Trends";
 
 // These guards are for navigation only. The real access control is the server's 401 and 403.
 function RequireAuth() {
@@ -21,6 +22,12 @@ function RequireAuth() {
 function RequireRole({ role }) {
   const { user } = useAuth();
   return user.role === role ? <Outlet /> : <Navigate to="/" replace />;
+}
+
+// MON-2: a fresh page per patient, so switching patients never shows the previous patient's data.
+function PatientViewForRoute() {
+  const { patientId } = useParams();
+  return <ProfessionalPatientView key={patientId} />;
 }
 
 function HomeRedirect() {
@@ -39,17 +46,7 @@ export default function App() {
           <Route element={<RequireRole role="patient" />}>
             <Route path="/patient" element={<PatientDashboard />} />
             <Route path="/patient/record" element={<RecordVitals />} />
-            <Route
-              path="/patient/trends"
-              element={
-                <ComingSoon
-                  title="Trends & history"
-                  subtitle="See how your readings change over time."
-                  Icon={ChartLine}
-                  message="Trend charts with a time filter and written summaries will appear on this page in an upcoming sprint."
-                />
-              }
-            />
+            <Route path="/patient/trends" element={<Trends />} />
             <Route
               path="/patient/appointments"
               element={
@@ -64,7 +61,7 @@ export default function App() {
           </Route>
           <Route element={<RequireRole role="professional" />}>
             <Route path="/professional" element={<ProfessionalRoster />} />
-            <Route path="/professional/patients/:patientId" element={<ProfessionalPatientView />} />
+            <Route path="/professional/patients/:patientId" element={<PatientViewForRoute />} />
           </Route>
         </Route>
       </Route>

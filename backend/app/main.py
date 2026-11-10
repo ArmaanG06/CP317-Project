@@ -35,7 +35,7 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     errors = []
     for err in exc.errors():
         loc = err.get("loc", ())
-        field = loc[-1] if loc and isinstance(loc[-1], str) and loc[-1] != "body" else None
+        field = loc[-1] if loc and isinstance(loc[-1], str) and loc[-1] not in ("body", "query") else None
         if err["type"] == "extra_forbidden":
             message = f"Unknown field: {field}."
         elif err["type"] == "json_invalid":

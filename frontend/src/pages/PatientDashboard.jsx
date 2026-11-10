@@ -1,4 +1,4 @@
-import { Info } from "lucide-react";
+import { ChartLine, Info } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
@@ -70,17 +70,21 @@ export default function PatientDashboard() {
       </div>
 
       <div className="grid grid-cols-[1fr_380px] gap-5">
-        <section className="flex flex-col gap-4 rounded-[20px] border border-line bg-card p-6 shadow-card">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold">Trends · last 7 days</h2>
-            <span className="rounded-full bg-warn-bg px-3 py-1 text-sm text-warn-text">Coming soon</span>
-          </div>
-          <div aria-hidden="true" className="flex h-[120px] items-end gap-3.5">
-            {[50, 75, 60, 95, 70, 88, 65, 100, 80, 72].map((h, i) => (
-              <span key={i} className="w-9 rounded-lg bg-line" style={{ height: `${h}%` }} />
-            ))}
-          </div>
-          <p className="text-sm text-muted">Your trend chart and a written summary of it will appear here.</p>
+        <section className="flex flex-col items-start gap-4 rounded-[20px] border border-line bg-card p-6 shadow-card">
+          <h2 className="flex items-center gap-2.5 text-xl font-semibold">
+            <ChartLine size={24} aria-hidden="true" className="text-primary" />
+            Trends
+          </h2>
+          <p className="text-muted">
+            See how your heart rate, blood pressure, temperature and oxygen saturation change over the last week,
+            month, or any period you choose.
+          </p>
+          <Link
+            to="/patient/trends"
+            className="inline-flex h-12 items-center rounded-full border-2 border-primary bg-card px-6 font-medium text-primary-dark hover:bg-primary-tint focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            View trends
+          </Link>
         </section>
         <section className="flex flex-col gap-3 rounded-[20px] border border-line bg-card p-6 shadow-card">
           <h2 className="flex items-center gap-2.5 text-base font-semibold">

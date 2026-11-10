@@ -71,6 +71,20 @@ Backend in `backend/app/monitoring.py` (tests: `backend/tests/test_monitoring.py
 ### Patient navigation (Zakir Hasham: UI-2-T1, UI-2-T2)
 The sidebar in `frontend/src/components/AppShell.jsx` links Dashboard, Record vitals, Trends & history, Appointments and My profile, and marks the current page (`aria-current="page"` plus highlight). Added a **Skip to main content** link as the first Tab stop so keyboard users can jump past the navigation. Tests in `frontend/src/components/AppShell.test.jsx` check one-click navigation between every pair of pages, a single current-page marker, Tab order, Enter to open, and the skip link.
 
+### Trends and patient dashboard (Armaan Gandhara: TR_REP-1, MON-2)
+Backend in `backend/app/readings.py` and `backend/app/monitoring.py` (tests: `backend/tests/test_trends.py`); frontend in `frontend/src/components/TrendsPanel.jsx`, `frontend/src/pages/Trends.jsx` and `ProfessionalPatientView.jsx` (tests: `Trends.test.jsx`, `ProfessionalPatientView.test.jsx`, `lib/trends.test.js`).
+
+| Endpoint | Description |
+|---|---|
+| `GET /readings/history?start=…&end=…` | The signed-in patient's readings in a period, oldest first: `{start, end, readings}`. Patients only |
+| `GET /patients/{patient_id}/readings/history?start=…&end=…` | Same for one patient. The patient themselves or an assigned professional only (AUTH-2) |
+
+`start` and `end` are ISO date-times and both are **inclusive**. Times without a timezone are read as UTC. With no period given, the last 30 days are returned; periods longer than 366 days, or a start after the end, return the usual 422 `errors`.
+
+- **Trends & history** (`/patient/trends`): choose the last 7, 30 or 90 days, or any From/To dates (both days included, in the user's local time). Each vital has a chart (blood pressure shows systolic and diastolic as two lines), a written summary (count, lowest, highest, average, latest) and a "Show values as a table" option.
+- **Patient dashboard for professionals** (`/professional/patients/:patientId`): latest readings, the same trends, and a **Flagged readings** section that ALT-2 will fill. A **Switch patient** menu moves between assigned patients, and the page reloads fully for each one so no data carries over. Unassigned patients still get a 403.
+- **Demo history:** `python seed.py` adds about 30 days of morning and evening readings for 8 demo patients, including a few out-of-range values for testing flags. These rows have `source = 'demo_seed'`; remove them with `DELETE FROM readings WHERE source = 'demo_seed';`.
+
 ## Running locally
 Setup instructions coming as the project is built.
 
