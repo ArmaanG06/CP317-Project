@@ -1,10 +1,11 @@
-import { ArrowLeft, Flag } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import Banner from "../components/Banner";
 import Button from "../components/Button";
 import Field from "../components/Field";
+import FlaggedReadings from "../components/FlaggedReadings";
 import TrendsPanel from "../components/TrendsPanel";
 import VitalCard from "../components/VitalCard";
 import usePageTitle from "../lib/usePageTitle";
@@ -20,7 +21,15 @@ export default function ProfessionalPatientView() {
   const [name, setName] = useState("");
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
+  const [flagRows, setFlagRows] = useState(null);
+  const [flagError, setFlagError] = useState("");
   usePageTitle(name || "Patient");
+
+  const fetchFlags = useCallback(() => {
+    setFlagError("");
+    setFlagRows(null);
+    api(`/patients/${patientId}/readings/flags`).then(setFlagRows).catch((e) => setFlagError(e.message));
+  }, [patientId]);
 
   const fetchPatient = useCallback(() => {
     return Promise.all([api("/professionals/me/patients"), api(`/patients/${patientId}/readings/latest`)])
@@ -28,11 +37,12 @@ export default function ProfessionalPatientView() {
         setRoster(patients);
         setName(patients.find((p) => p.patient_id === patientId)?.full_name ?? "Patient");
         setRows(readings);
+        fetchFlags();
       })
       .catch((e) =>
         setError(e.status === 403 ? "This patient isn’t assigned to you, so their records aren’t available." : e.message)
       );
-  }, [patientId]);
+  }, [patientId, fetchFlags]);
   useEffect(() => {
     fetchPatient();
   }, [fetchPatient]);
@@ -40,6 +50,8 @@ export default function ProfessionalPatientView() {
   const retry = () => {
     setError("");
     setRows(null);
+    setFlagRows(null);
+    setFlagError("");
     fetchPatient();
   };
 
@@ -98,21 +110,7 @@ export default function ProfessionalPatientView() {
 
           <TrendsPanel historyPath={`/patients/${patientId}/readings/history`} />
 
-          {/* ALT-2 placeholder: automatic flags plug in here once readings are checked against thresholds. */}
-          <section aria-labelledby="flags-heading" className="flex flex-col gap-3 rounded-[20px] border border-line bg-card p-6 shadow-card">
-            <div className="flex items-center justify-between gap-3">
-              <h2 id="flags-heading" className="flex items-center gap-2.5 text-xl font-semibold">
-                <Flag size={22} aria-hidden="true" className="text-primary" />
-                Flagged readings
-              </h2>
-              <span className="rounded-full bg-warn-bg px-3 py-1 text-sm text-warn-text">Coming soon</span>
-            </div>
-            <p className="text-muted">
-              Readings outside this patient’s thresholds will be listed here automatically once reading flags are
-              available.
-            </p>
-            <p className="text-sm text-muted">Flags are a monitoring aid, not a diagnosis.</p>
-          </section>
+          <FlaggedReadings headingId="flags-heading" rows={flagRows} error={flagError} onRetry={fetchFlags} />
         </>
       )}
     </>

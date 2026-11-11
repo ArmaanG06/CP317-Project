@@ -1,5 +1,7 @@
 import { Bell, Calendar, ChartLine, CirclePlus, Heart, LayoutDashboard, LogOut, UserRound, Users } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 
 const PATIENT_NAV = [
@@ -11,7 +13,7 @@ const PATIENT_NAV = [
 ];
 const PRO_NAV = [
   { to: "/professional", label: "My patients", Icon: Users, end: true },
-  { label: "Alerts", Icon: Bell, soon: true },
+  { to: "/professional/alerts", label: "Alerts", Icon: Bell },
   { label: "Schedule", Icon: Calendar, soon: true },
   { to: "/profile", label: "My profile", Icon: UserRound },
 ];
@@ -21,6 +23,18 @@ const ITEM = "flex h-12 w-full items-center gap-3 rounded-full px-4 font-medium 
 export default function AppShell() {
   const { user, logout } = useAuth();
   const patient = user.role === "patient";
+  const location = useLocation();
+  const [alertCount, setAlertCount] = useState(null);
+
+  useEffect(() => {
+    if (patient) return;
+    const refresh = () => api("/professionals/me/alerts/count")
+      .then((data) => setAlertCount(data.unreviewed_count))
+      .catch(() => setAlertCount(null));
+    refresh();
+    window.addEventListener("alerts:changed", refresh);
+    return () => window.removeEventListener("alerts:changed", refresh);
+  }, [patient, location.pathname]);
   const initials = user.full_name.split(" ").map((s) => s[0]).join("").slice(0, 2).toUpperCase();
   const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
@@ -55,6 +69,11 @@ export default function AppShell() {
               >
                 <Icon size={20} aria-hidden="true" />
                 {label}
+                {label === "Alerts" && alertCount > 0 && (
+                  <span className="ml-auto rounded-full bg-warn-bg px-2 py-0.5 text-sm font-semibold text-warn-text">
+                    <span className="sr-only">Unreviewed: </span>{alertCount}
+                  </span>
+                )}
               </NavLink>
             )
           )}

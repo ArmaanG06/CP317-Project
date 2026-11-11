@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, Session, mapped_column
 
 from app.db import Base, get_db
 from app.deps import CurrentUser
+from app.thresholds import ReadingEvaluation, assess_readings
 
 # --- Input limits ---
 # Physically plausible values used to reject bad input (inclusive bounds).
@@ -95,6 +96,14 @@ def _as_utc(v: datetime) -> datetime:
 UTCDatetime = Annotated[datetime, AfterValidator(_as_utc)]
 
 
+class FlagDetail(BaseModel):
+    direction: str
+    breached_limit: float
+    lower_limit: float
+    upper_limit: float
+    threshold_source: str
+
+
 class ReadingOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -105,6 +114,7 @@ class ReadingOut(BaseModel):
     recorded_at: UTCDatetime
     submission_id: str
     source: str
+    flag: FlagDetail | None = None
 
 
 class LatestReading(BaseModel):
@@ -114,6 +124,7 @@ class LatestReading(BaseModel):
     recorded_at: UTCDatetime | None
     available: bool
     message: str | None
+    flag: FlagDetail | None = None
 
 
 class HistoryQuery(BaseModel):
@@ -157,6 +168,40 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _flag_detail(evaluation: ReadingEvaluation | None) -> FlagDetail | None:
+    if evaluation is None or evaluation.direction is None:
+        return None
+    return FlagDetail(
+        direction=evaluation.direction,
+        breached_limit=evaluation.breached_limit,
+        lower_limit=evaluation.lower_limit,
+        upper_limit=evaluation.upper_limit,
+        threshold_source=evaluation.threshold_source,
+    )
+
+
+def _evaluations_for_rows(db: Session, rows: list[Reading]) -> dict[int, ReadingEvaluation]:
+    if not rows:
+        return {}
+    evaluations = {}
+    # History can hold more rows than older SQLite builds allow in one IN query.
+    for start in range(0, len(rows), 500):
+        ids = [row.id for row in rows[start : start + 500]]
+        evaluations.update({
+            evaluation.reading_id: evaluation
+            for evaluation in db.scalars(select(ReadingEvaluation).where(ReadingEvaluation.reading_id.in_(ids)))
+        })
+    return evaluations
+
+
+def _reading_outputs(db: Session, rows: list[Reading]) -> list[ReadingOut]:
+    evaluations = _evaluations_for_rows(db, rows)
+    return [
+        ReadingOut.model_validate(row).model_copy(update={"flag": _flag_detail(evaluations.get(row.id))})
+        for row in rows
+    ]
+
+
 def save_reading(db: Session, patient_id: uuid.UUID, payload: ReadingCreate) -> list[Reading]:
     submission_id = str(uuid.uuid4())
     recorded_at = utcnow()
@@ -173,8 +218,16 @@ def save_reading(db: Session, patient_id: uuid.UUID, payload: ReadingCreate) -> 
         for name in VITAL_ORDER
         if getattr(payload, name) is not None
     ]
-    db.add_all(rows)
-    db.commit()
+    try:
+        db.add_all(rows)
+        db.flush()  # Reading IDs are needed by their immutable evaluations.
+        evaluations = assess_readings(db, rows)
+        from app.alerts import queue_alerts  # Local import avoids a Reading/alert model cycle.
+        queue_alerts(db, rows, evaluations)
+        db.commit()  # Reading, evaluation and recipient alerts succeed or fail together.
+    except Exception:
+        db.rollback()
+        raise
     for row in rows:
         db.refresh(row)
     return rows
@@ -193,6 +246,7 @@ def get_latest(db: Session, patient_id: uuid.UUID) -> list[LatestReading]:
     )
     rows = db.scalars(select(Reading).join(ranked, Reading.id == ranked.c.id).where(ranked.c.rn == 1))
     newest = {row.vital_type: row for row in rows}
+    evaluations = _evaluations_for_rows(db, list(newest.values()))
 
     result = []
     for name in VITAL_ORDER:
@@ -205,6 +259,7 @@ def get_latest(db: Session, patient_id: uuid.UUID) -> list[LatestReading]:
                 recorded_at=row.recorded_at if row else None,
                 available=row is not None,
                 message=None if row else "No reading available",
+                flag=_flag_detail(evaluations.get(row.id)) if row else None,
             )
         )
     return result
@@ -212,16 +267,32 @@ def get_latest(db: Session, patient_id: uuid.UUID) -> list[LatestReading]:
 
 def get_history(db: Session, patient_id: uuid.UUID, period: HistoryQuery) -> ReadingHistory:
     """Every saved value in the period, oldest first, for trend charts."""
-    rows = db.scalars(
-        select(Reading)
-        .where(
-            Reading.patient_id == patient_id,
-            Reading.recorded_at >= period.start,
-            Reading.recorded_at <= period.end,
+    rows = list(
+        db.scalars(
+            select(Reading)
+            .where(
+                Reading.patient_id == patient_id,
+                Reading.recorded_at >= period.start,
+                Reading.recorded_at <= period.end,
+            )
+            .order_by(Reading.recorded_at, Reading.id)
         )
-        .order_by(Reading.recorded_at, Reading.id)
     )
-    return ReadingHistory(start=period.start, end=period.end, readings=[ReadingOut.model_validate(r) for r in rows])
+    return ReadingHistory(start=period.start, end=period.end, readings=_reading_outputs(db, rows))
+
+
+def get_flags(db: Session, patient_id: uuid.UUID, limit: int = 50) -> list[ReadingOut]:
+    """Newest evaluated breaches for a patient; no GET reclassifies old readings."""
+    rows = list(
+        db.scalars(
+            select(Reading)
+            .join(ReadingEvaluation, ReadingEvaluation.reading_id == Reading.id)
+            .where(Reading.patient_id == patient_id, ReadingEvaluation.direction.is_not(None))
+            .order_by(Reading.recorded_at.desc(), Reading.id.desc())
+            .limit(limit)
+        )
+    )
+    return _reading_outputs(db, rows)
 
 
 # --- Routes ---
@@ -241,7 +312,7 @@ def create_reading(
     db: Session = Depends(get_db),
 ):
     _require_patient(user)
-    return save_reading(db, user.id, payload)
+    return _reading_outputs(db, save_reading(db, user.id, payload))
 
 
 @router.get("/latest", response_model=list[LatestReading])
@@ -261,3 +332,13 @@ def reading_history(
 ):
     _require_patient(user)
     return get_history(db, user.id, period)
+
+
+@router.get("/flags", response_model=list[ReadingOut])
+def own_flagged_readings(
+    user: CurrentUser,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    _require_patient(user)
+    return get_flags(db, user.id, limit)

@@ -4,6 +4,7 @@ import { useAuth } from "./auth/AuthContext";
 import AppShell from "./components/AppShell";
 import ComingSoon from "./pages/ComingSoon";
 import PatientDashboard from "./pages/PatientDashboard";
+import ProfessionalAlerts from "./pages/ProfessionalAlerts";
 import ProfessionalPatientView from "./pages/ProfessionalPatientView";
 import ProfessionalRoster from "./pages/ProfessionalRoster";
 import Profile from "./pages/Profile";
@@ -61,6 +62,7 @@ export default function App() {
           </Route>
           <Route element={<RequireRole role="professional" />}>
             <Route path="/professional" element={<ProfessionalRoster />} />
+            <Route path="/professional/alerts" element={<ProfessionalAlerts />} />
             <Route path="/professional/patients/:patientId" element={<PatientViewForRoute />} />
           </Route>
         </Route>

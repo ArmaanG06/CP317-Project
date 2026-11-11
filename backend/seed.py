@@ -4,13 +4,15 @@ from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import select
 
-from app import access, models, readings  # noqa: F401  (registers every table for create_all)
+from app import access, models, readings, thresholds  # noqa: F401  (registers every table for create_all)
 from app.access import assign_patient
+from app.alerts import backfill_alerts, queue_alerts
 from app.db import Base, SessionLocal, engine
 from app.models import Role, User
 from app.profiles import Profile, ProfileUpdate, save_profile
 from app.readings import VITAL_LIMITS, Reading
 from app.security import hash_password
+from app.thresholds import ReadingEvaluation, assess_readings
 
 DEMO_PASSWORD = "Demo-Pass-123"  # fake demo data only
 USERS = [
@@ -159,12 +161,45 @@ def main():
             patient = db.scalar(select(User).where(User.email == email))
             if patient is None:
                 continue
-            if db.scalar(select(Reading.id).where(Reading.patient_id == patient.id, Reading.source == "demo_seed").limit(1)):
-                continue  # already has demo history
-            rows = demo_readings(patient.id, baseline, overrides, now)
-            db.add_all(rows)
+            has_demo_history = db.scalar(
+                select(Reading.id).where(Reading.patient_id == patient.id, Reading.source == "demo_seed").limit(1)
+            )
+            if has_demo_history:
+                # Deliberate demo-only backfill for databases seeded before ALT-2.
+                # Evaluated rows, including normal ones, are never reclassified.
+                rows = list(db.scalars(
+                    select(Reading)
+                    .outerjoin(ReadingEvaluation, ReadingEvaluation.reading_id == Reading.id)
+                    .where(
+                        Reading.patient_id == patient.id,
+                        Reading.source == "demo_seed",
+                        ReadingEvaluation.reading_id.is_(None),
+                    )
+                ))
+            else:
+                rows = demo_readings(patient.id, baseline, overrides, now)
+            if rows:
+                try:
+                    if not has_demo_history:
+                        db.add_all(rows)
+                        db.flush()
+                    evaluations = assess_readings(db, rows)
+                    queue_alerts(db, rows, evaluations)
+                    db.commit()
+                except Exception:
+                    db.rollback()
+                    raise
+                print(f"demo readings evaluated: {email} ({len(rows)} values)")
+
+        # Existing saved flags predate ALT-1. Give current demo assignees one
+        # review record per flag; uniqueness makes repeat seeding safe.
+        try:
+            added = backfill_alerts(db)
             db.commit()
-            print(f"demo readings added: {email} ({len(rows)} values)")
+        except Exception:
+            db.rollback()
+            raise
+        print(f"existing flags given alerts: {added}")
 
 
 if __name__ == "__main__":

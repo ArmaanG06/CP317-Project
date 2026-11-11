@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import monitoring, profiles, readings
+from app import alerts, monitoring, profiles, readings, thresholds  # noqa: F401 (register all tables)
 from app.config import FRONTEND_ORIGIN
 from app.db import Base, engine
 from app.routers import auth
@@ -13,7 +13,7 @@ from app.routers import auth
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Creates missing tables (users, readings, profiles, patient_assignments) on startup. Can be replaced with migrations later.
+    # Creates missing tables on startup. Existing-column changes still need a migration.
     Base.metadata.create_all(engine)
     yield
 
@@ -50,6 +50,7 @@ app.include_router(auth.router)
 app.include_router(readings.router)
 app.include_router(profiles.router)
 app.include_router(monitoring.router)
+app.include_router(alerts.router)
 
 
 @app.get("/health")
