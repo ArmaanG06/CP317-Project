@@ -1,5 +1,5 @@
-import { Droplet, Heart, Thermometer, Wind } from "lucide-react";
-import { formatWhen } from "../lib/vitals";
+import { Droplet, Flag, Heart, Thermometer, Wind } from "lucide-react";
+import { flagText, formatWhen } from "../lib/vitals";
 
 const ICONS = { heart: Heart, bp: Droplet, temp: Thermometer, spo2: Wind };
 
@@ -30,6 +30,19 @@ export default function VitalCard({ label, unit, icon, reading, loading }) {
         <span className="self-start rounded-full bg-primary-tint px-2.5 py-1 text-sm text-primary-dark">
           {reading ? "Patient-entered" : "Awaiting first reading"}
         </span>
+      )}
+      {!loading && reading?.flags?.length > 0 && (
+        <div className="rounded-xl bg-warn-bg p-3 text-sm text-warn-text">
+          <p className="flex items-center gap-2 font-semibold">
+            <Flag size={16} aria-hidden="true" />
+            Flagged for review
+          </p>
+          <ul className="mt-1 list-inside list-disc">
+            {reading.flags.map(({ vitalType, value, flag }) => (
+              <li key={vitalType}>{flagText(vitalType, value, flag)}</li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

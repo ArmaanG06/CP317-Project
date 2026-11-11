@@ -82,8 +82,24 @@ Backend in `backend/app/readings.py` and `backend/app/monitoring.py` (tests: `ba
 `start` and `end` are ISO date-times and both are **inclusive**. Times without a timezone are read as UTC. With no period given, the last 30 days are returned; periods longer than 366 days, or a start after the end, return the usual 422 `errors`.
 
 - **Trends & history** (`/patient/trends`): choose the last 7, 30 or 90 days, or any From/To dates (both days included, in the user's local time). Each vital has a chart (blood pressure shows systolic and diastolic as two lines), a written summary (count, lowest, highest, average, latest) and a "Show values as a table" option.
-- **Patient dashboard for professionals** (`/professional/patients/:patientId`): latest readings, the same trends, and a **Flagged readings** section that ALT-2 will fill. A **Switch patient** menu moves between assigned patients, and the page reloads fully for each one so no data carries over. Unassigned patients still get a 403.
+- **Patient dashboard for professionals** (`/professional/patients/:patientId`): latest readings, the same trends, and saved flagged readings. A **Switch patient** menu moves between assigned patients, and the page reloads fully for each one so no data carries over. Unassigned patients still get a 403.
 - **Demo history:** `python seed.py` adds about 30 days of morning and evening readings for 8 demo patients, including a few out-of-range values for testing flags. These rows have `source = 'demo_seed'`; remove them with `DELETE FROM readings WHERE source = 'demo_seed';`.
+
+### Reading flags and professional alerts (Jacob Habte: ALT-2, ALT-1)
+
+Accepted measurements are evaluated against the prototype adult alert thresholds in `backend/app/thresholds.py`, separately from input-validation ranges. A value strictly outside its applicable limits receives a saved flag with the breached limit and direction. Patient overrides, when present, affect future readings only. Both dashboards show flags; a flag is a monitoring aid, not a diagnosis.
+
+Each new flag creates one alert for **each professional assigned at submission time**, in the same database transaction as the reading. Review state belongs to the individual professional; reviewing an alert leaves the measurement and flag unchanged. The professional Alerts page is at `/professional/alerts`.
+
+| Endpoint | Description |
+|---|---|
+| `GET /readings/flags` | Patient's own recent flagged measurements |
+| `GET /patients/{patient_id}/readings/flags` | Flags for the patient or an assigned professional |
+| `GET /professionals/me/alerts?patient_id=…&status=all\|unreviewed\|reviewed` | Signed-in professional's alerts with optional filters. `unreviewed_count` is global across all their assigned patients, regardless of filters. |
+| `GET /professionals/me/alerts/count` | Global unreviewed count for the signed-in professional |
+| `PATCH /professionals/me/alerts/{alert_id}/review` | Mark the professional's alert reviewed; safe to repeat |
+
+For a database that already has evaluated flags from before ALT-1, run `python backfill_alerts.py` from `backend/` once after updating. It creates missing tables and recipient alerts for currently assigned professionals. It is idempotent. `seed.py` also performs this step for the fictional demo data. Do not run the demo seeder against a production database.
 
 ## Running locally
 Setup instructions coming as the project is built.

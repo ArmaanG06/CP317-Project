@@ -65,13 +65,31 @@ export function formatWhen(iso) {
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}, ${time}`;
 }
 
+// Describe a server-created flag. LIMITS supplies labels/units only; the
+// breached alert threshold always comes from the saved backend flag.
+export function flagText(vitalType, value, flag) {
+  const { label, unit, decimals } = LIMITS[vitalType];
+  const show = (n) => Number(n).toFixed(decimals);
+  const bound = flag.direction === "below" ? "lower" : "upper";
+  return `${label} ${show(value)} ${unit} is ${flag.direction} the ${bound} limit of ${show(flag.breached_limit)} ${unit}.`;
+}
+
 // Turns the backend's 5-row /readings/latest list into the 4 dashboard cards.
 export function buildCards(rows) {
   const by = Object.fromEntries((rows ?? []).map((r) => [r.vital_type, r]));
-  const one = (k, fmt) => (by[k]?.available ? { display: fmt(by[k].value), at: by[k].recorded_at } : null);
+  const flagsFor = (k) =>
+    by[k]?.flag ? [{ vitalType: k, value: by[k].value, flag: by[k].flag }] : [];
+  const one = (k, fmt) =>
+    by[k]?.available
+      ? { display: fmt(by[k].value), at: by[k].recorded_at, flags: flagsFor(k) }
+      : null;
   const bp =
     by.systolic?.available && by.diastolic?.available
-      ? { display: `${by.systolic.value}/${by.diastolic.value}`, at: by.systolic.recorded_at }
+      ? {
+          display: `${by.systolic.value}/${by.diastolic.value}`,
+          at: by.systolic.recorded_at,
+          flags: [...flagsFor("systolic"), ...flagsFor("diastolic")],
+        }
       : null;
   return [
     { label: "Heart rate", unit: "bpm", icon: "heart", reading: one("heart_rate", String) },

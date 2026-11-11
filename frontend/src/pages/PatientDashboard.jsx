@@ -5,6 +5,7 @@ import { api } from "../api";
 import { useAuth } from "../auth/AuthContext";
 import Banner from "../components/Banner";
 import Button from "../components/Button";
+import FlaggedReadings from "../components/FlaggedReadings";
 import VitalCard from "../components/VitalCard";
 import usePageTitle from "../lib/usePageTitle";
 import { buildCards } from "../lib/vitals";
@@ -22,14 +23,32 @@ export default function PatientDashboard() {
   const [saved] = useState(Boolean(location.state?.saved)); // set by the Record vitals page
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
+  const [flagRows, setFlagRows] = useState(null);
+  const [flagError, setFlagError] = useState("");
 
   const load = useCallback(() => {
-    setError("");
-    setRows(null);
     api("/readings/latest").then(setRows).catch((e) => setError(e.message));
   }, []);
 
   useEffect(load, [load]);
+
+  const loadFlags = useCallback(() => {
+    api("/readings/flags").then(setFlagRows).catch((e) => setFlagError(e.message));
+  }, []);
+
+  useEffect(loadFlags, [loadFlags]);
+
+  const retryReadings = () => {
+    setError("");
+    setRows(null);
+    load();
+  };
+
+  const retryFlags = () => {
+    setFlagError("");
+    setFlagRows(null);
+    loadFlags();
+  };
 
   // Clear the "saved" flag from history so a refresh doesn't show the banner again.
   useEffect(() => {
@@ -59,7 +78,7 @@ export default function PatientDashboard() {
       {error && (
         <Banner title="We couldn’t load your readings">
           {error}{" "}
-          <Button variant="secondary" className="mt-2 h-10" onClick={load}>Try again</Button>
+          <Button variant="secondary" className="mt-2 h-10" onClick={retryReadings}>Try again</Button>
         </Banner>
       )}
 
@@ -68,6 +87,8 @@ export default function PatientDashboard() {
           <VitalCard key={c.label} {...c} loading={loading} />
         ))}
       </div>
+
+      <FlaggedReadings headingId="patient-flags-heading" rows={flagRows} error={flagError} onRetry={retryFlags} />
 
       <div className="grid grid-cols-[1fr_380px] gap-5">
         <section className="flex flex-col items-start gap-4 rounded-[20px] border border-line bg-card p-6 shadow-card">

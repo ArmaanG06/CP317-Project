@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app.access import ROLE_PROFESSIONAL, PatientAssignment, require_patient_access, require_role
 from app.db import get_db
 from app.models import User
-from app.readings import HistoryQuery, LatestReading, ReadingHistory, UTCDatetime, get_history, get_latest
+from app.readings import HistoryQuery, LatestReading, ReadingHistory, ReadingOut, UTCDatetime, get_flags, get_history, get_latest
 
 
 def patient_dashboard_path(patient_id: uuid.UUID) -> str:
@@ -82,3 +82,13 @@ def patient_reading_history(
     db: Session = Depends(get_db),
 ):
     return get_history(db, patient_id, period)
+
+
+@router.get("/patients/{patient_id}/readings/flags", response_model=list[ReadingOut])
+def patient_flagged_readings(
+    patient_id: uuid.UUID,
+    _user: User = Depends(require_patient_access),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+):
+    return get_flags(db, patient_id, limit)
