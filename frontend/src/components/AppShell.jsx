@@ -48,10 +48,15 @@ export default function AppShell() {
         Skip to main content
       </a>
       <aside className="flex w-[260px] shrink-0 flex-col gap-2 bg-nav px-5 py-7">
-        <div aria-hidden="true" className="mb-2 flex size-10 items-center justify-center rounded-full bg-primary">
-          <Heart size={22} className="text-white" />
+        <div className="mb-4 flex items-center gap-3">
+          <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-primary">
+            <Heart size={22} className="text-white" />
+          </span>
+          <span className="text-xl font-semibold text-white">VitalTrack</span>
         </div>
-        <p className="px-4 pt-2 pb-1 text-sm text-nav-text">{patient ? "Patient portal" : "Clinician portal"}</p>
+        <p className="px-4 pb-1 text-sm font-medium tracking-wide text-nav-text uppercase">
+          {patient ? "Patient portal" : "Clinician portal"}
+        </p>
         <nav aria-label="Main" className="flex flex-col gap-2">
           {(patient ? PATIENT_NAV : PRO_NAV).map(({ to, label, Icon, end, soon }) =>
             soon ? (

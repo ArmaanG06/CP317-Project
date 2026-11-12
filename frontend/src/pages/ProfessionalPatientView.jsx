@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Info } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
@@ -66,18 +66,22 @@ export default function ProfessionalPatientView() {
     <>
       <Link
         to="/professional"
-        className="inline-flex items-center gap-2 self-start rounded-full font-medium text-primary-dark hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="inline-flex items-center gap-1.5 self-start rounded-full text-sm font-medium text-accent hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
-        <ArrowLeft size={18} aria-hidden="true" />
-        Back to my patients
+        <ArrowLeft size={16} aria-hidden="true" />
+        My patients
       </Link>
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-[28px] leading-9 font-bold">{loading ? "Loading patient…" : error ? "Patient" : name}</h1>
-          <p className="text-muted">Latest readings, trends and flags.</p>
+          <p className="text-muted">{error ? "Latest readings, trends and flags." : "Assigned to you · Latest readings, trends and flags."}</p>
         </div>
-        {roster.length > 1 && (
+        <div className="flex flex-wrap items-end gap-4">
+          {!error && (
+            <span className="mb-3 rounded-full bg-ok-bg px-3 py-1 text-sm text-ok-text">All readings are patient-entered</span>
+          )}
+          {roster.length > 1 && (
           <div className="w-72">
             <Field
               id="switch-patient"
@@ -87,7 +91,8 @@ export default function ProfessionalPatientView() {
               options={roster.map((p) => ({ value: p.patient_id, label: p.full_name }))}
             />
           </div>
-        )}
+          )}
+        </div>
       </div>
 
       {error && (
@@ -110,7 +115,19 @@ export default function ProfessionalPatientView() {
 
           <TrendsPanel historyPath={`/patients/${patientId}/readings/history`} />
 
-          <FlaggedReadings headingId="flags-heading" rows={flagRows} error={flagError} onRetry={fetchFlags} />
+          <div className="grid grid-cols-[1fr_380px] items-start gap-5">
+            <FlaggedReadings headingId="flags-heading" rows={flagRows} error={flagError} onRetry={fetchFlags} />
+            <section className="flex flex-col gap-3 rounded-[20px] border border-line bg-card p-6 shadow-card">
+              <h2 className="flex items-center gap-2.5 text-base font-semibold">
+                <Info size={24} aria-hidden="true" className="text-primary" />
+                Interpreting readings
+              </h2>
+              <p className="text-muted">
+                Values are entered by the patient at home. Home devices can vary in accuracy, so use clinical judgment
+                alongside these readings.
+              </p>
+            </section>
+          </div>
         </>
       )}
     </>

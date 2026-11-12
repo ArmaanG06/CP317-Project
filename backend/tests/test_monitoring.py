@@ -47,3 +47,15 @@ def test_assigned_patient_with_no_readings_shows_empty_state(professional_client
     r = professional_client.get(f"/patients/{users['patient2'].id}/readings/latest")
     assert r.status_code == 200
     assert all(row["message"] == "No reading available" for row in r.json())
+
+
+def test_roster_includes_each_patients_latest_vitals(patient1_client, professional_client, db_session, users):
+    assign_patient(db_session, users["professional"].id, users["patient1"].id)
+    assign_patient(db_session, users["professional"].id, users["patient2"].id)
+    patient1_client.post("/readings", json={"heart_rate": 72, "systolic": 128, "diastolic": 82})
+
+    roster = {row["full_name"]: row for row in professional_client.get("/professionals/me/patients").json()}
+    latest = {r["vital_type"]: r for r in roster["Patient One"]["latest"]}
+    assert latest["heart_rate"]["value"] == 72 and latest["systolic"]["value"] == 128
+    assert latest["temperature"]["available"] is False
+    assert all(not r["available"] for r in roster["Patient Two"]["latest"])

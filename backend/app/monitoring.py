@@ -34,6 +34,7 @@ class RosterEntry(BaseModel):
     full_name: str
     assigned_at: UTCDatetime
     dashboard_path: str
+    latest: list[LatestReading]  # newest value per vital, so the roster can show last reading and latest vitals
 
 
 # --- Logic ---
@@ -50,8 +51,9 @@ def get_roster(db: Session, professional_id: uuid.UUID) -> list[RosterEntry]:
             full_name=full_name,
             assigned_at=assignment.assigned_at,
             dashboard_path=patient_dashboard_path(assignment.patient_id),
+            latest=get_latest(db, assignment.patient_id),
         )
-        for assignment, full_name in rows
+        for assignment, full_name in rows.all()
     ]
 
 
