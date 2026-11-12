@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import alerts, appointements, monitoring, profiles, readings, thresholds  # noqa: F401 (register all tables)
+from app import alerts, appointments, monitoring, profiles, readings, thresholds
 from app.config import FRONTEND_ORIGIN
 from app.db import Base, engine
 from app.routers import auth
