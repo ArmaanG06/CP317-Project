@@ -1,12 +1,14 @@
 import random
 import uuid
 from datetime import datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
 from app import access, appointments, models, readings, thresholds  # noqa: F401  (registers every table for create_all)
 from app.access import assign_patient
 from app.alerts import backfill_alerts, queue_alerts
+from app.appointments import AppointmentBooking, AppointmentSlot
 from app.db import Base, SessionLocal, engine
 from app.models import Role, User
 from app.profiles import Profile, ProfileUpdate, save_profile
@@ -48,7 +50,118 @@ ASSIGNMENTS = {
     "dr.lee@example.com": ["maya.chen@example.com", "daniel.okafor@example.com", "priya.raman@example.com"],
     "armaan.gandhara@example.com": ["lucas.bouchard@example.com", "hannah.weiss@example.com", "ethan.tremblay@example.com"],
     "zakir.hasham@example.com": ["arica.ng@example.com", "jenny.wang@example.com"],
+    # Every other patient, so all patients can book appointments. Dr. Dingle Fritz stays empty for the empty-roster demo.
+    "yustin.jao@example.com": [
+        "jacob.habte@example.com", "olivia.gagnon@example.com", "noah.macdonald@example.com",
+        "fih@example.com", "cuh@example.com", "tung.sahur@example.com", "goopy.grumstein@example.com",
+        "504.mountainbatin@example.com", "toaster.strudelman@example.com",
+    ],
 }
+
+# APT demo data: past visits (completed and cancelled) with visit notes, one upcoming visit per assigned patient,
+# and open availability for every professional for the next three weeks. Times are in Waterloo local time.
+# Demo rows are recognised by these clinic names. Remove them with:
+#   DELETE FROM appointment_bookings WHERE slot_id IN (SELECT id FROM appointment_slots WHERE location IN (<names below>));
+#   DELETE FROM appointment_slots WHERE location IN (<names below>);
+LOCAL_TZ = ZoneInfo("America/Toronto")
+DEMO_CLINICS = {
+    "dr.lee@example.com": "Clinic A, Waterloo",
+    "armaan.gandhara@example.com": "Clinic B, Kitchener",
+    "zakir.hasham@example.com": "Clinic C, Cambridge",
+    "yustin.jao@example.com": "University Health Clinic, Waterloo",
+    "dingle.fritz@example.com": "Clinic D, Guelph",
+}
+DEMO_HOURS = [(9, 12), (13, 16)]  # morning and afternoon availability blocks, alternating by day
+PAST_NOTES = [
+    "Visit notes: Reviewed two weeks of home readings. Blood pressure trending down; continue current plan and log readings twice daily.",
+    "Visit notes: Follow-up on an elevated heart rate reading. Likely after exercise; no changes. Re-check resting rate in the morning.",
+    "Visit notes: Monthly check-in. Vitals within range. Discussed hydration and sleep; next review in one month.",
+    "Visit notes: Reviewed a low oxygen saturation reading. Repeat readings normal; probably a poor sensor fit. Shown how to re-seat the device.",
+    "Visit notes: Temperature spike last week has resolved. No further action; contact the clinic if it returns.",
+    "Visit notes: Medication review. Patient reports no side effects. Keep the current dose and continue home monitoring.",
+]
+CANCEL_REASONS = [
+    "Reason for visit: Routine follow-up. (Cancelled by patient: schedule conflict.)",
+    "Reason for visit: Discuss recent readings. (Cancelled by patient: feeling better, will rebook.)",
+]
+UPCOMING_REASONS = [
+    "Reason for visit: Review this month's blood pressure trend.",
+    "Reason for visit: Follow-up on flagged heart rate readings.",
+    "Reason for visit: Monthly check-in and medication review.",
+    "Reason for visit: Discuss home monitoring routine.",
+]
+
+
+def local_at(day, hour, minute=0):
+    return datetime.combine(day, time(hour, minute), LOCAL_TZ).astimezone(timezone.utc)
+
+
+def overlaps(slots, start, end):
+    return any(as_aware(s.starts_at) < end and as_aware(s.ends_at) > start for s in slots)
+
+
+def as_aware(value):
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def seed_appointments(db, pro, patients, now):
+    """Adds demo slots and bookings for one professional. Skips anyone who already has demo appointments."""
+    location = DEMO_CLINICS[pro.email]
+    already = select(AppointmentSlot.id).where(AppointmentSlot.professional_id == pro.id, AppointmentSlot.location == location)
+    if db.scalar(already.limit(1)):
+        return 0, 0
+    existing = list(db.scalars(select(AppointmentSlot).where(AppointmentSlot.professional_id == pro.id)))
+    today = now.astimezone(LOCAL_TZ).date()
+    slots, bookings = [], []
+
+    # Open availability: 30-minute slots on weekdays for the next 21 days, never in the past or over real slots.
+    open_slots = []
+    for offset in range(1, 22):
+        day = today + timedelta(days=offset)
+        if day.weekday() >= 5:
+            continue
+        first, last = DEMO_HOURS[offset % 2]
+        for half in range((last - first) * 2):
+            start = local_at(day, first) + timedelta(minutes=30 * half)
+            end = start + timedelta(minutes=30)
+            if start > now and not overlaps(existing, start, end):
+                slot = AppointmentSlot(professional_id=pro.id, starts_at=start, ends_at=end, location=location)
+                slots.append(slot)
+                open_slots.append(slot)
+
+    taken = set()
+    for i, patient in enumerate(patients):
+        # Upcoming: one booked visit per patient, spread across the open slots.
+        if open_slots:
+            index = (i * 7 + 3) % len(open_slots)
+            while index in taken and len(taken) < len(open_slots):
+                index = (index + 1) % len(open_slots)
+            taken.add(index)
+            reason = UPCOMING_REASONS[i % len(UPCOMING_REASONS)]
+            bookings.append((open_slots[index], dict(patient_id=patient.id, reason=reason)))
+        # Past: three visits about 2, 5 and 8 weeks ago; every third patient cancelled the middle one.
+        for k, weeks in enumerate((2, 5, 8)):
+            day = today - timedelta(weeks=weeks, days=i % 3)
+            while day.weekday() >= 5:
+                day -= timedelta(days=1)
+            start = local_at(day, 10 + i % 5, 30 if i % 2 else 0)
+            end = start + timedelta(minutes=30)
+            if overlaps(existing, start, end) or overlaps(slots, start, end):
+                continue
+            slot = AppointmentSlot(professional_id=pro.id, starts_at=start, ends_at=end, location=location)
+            slots.append(slot)
+            if k == 1 and i % 3 == 0:
+                bookings.append((slot, dict(
+                    patient_id=patient.id, reason=CANCEL_REASONS[i % 2], cancelled_at=start - timedelta(days=2),
+                )))
+            else:
+                bookings.append((slot, dict(patient_id=patient.id, reason=PAST_NOTES[(i + k) % len(PAST_NOTES)])))
+
+    db.add_all(slots)
+    db.flush()  # gives slots their ids before bookings point at them
+    db.add_all(AppointmentBooking(slot_id=slot.id, **fields) for slot, fields in bookings)
+    db.commit()
+    return len(slots), len(bookings)
 
 # TR_REP-1 / MON-2 demo history: about 30 days of morning and evening readings for these patients.
 # Values are fictional. Each (day, vital, value) override is an out-of-range reading for ALT-2 flags to catch.
@@ -200,6 +313,15 @@ def main():
             db.rollback()
             raise
         print(f"existing flags given alerts: {added}")
+
+        for pro_email in DEMO_CLINICS:
+            pro = db.scalar(select(User).where(User.email == pro_email))
+            if pro is None:
+                continue
+            patients = [db.scalar(select(User).where(User.email == e)) for e in ASSIGNMENTS.get(pro_email, [])]
+            made_slots, made_bookings = seed_appointments(db, pro, [p for p in patients if p], now)
+            if made_slots:
+                print(f"demo appointments added: {pro_email} ({made_slots} slots, {made_bookings} bookings)")
 
 
 if __name__ == "__main__":
