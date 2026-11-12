@@ -4,7 +4,7 @@ from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import select
 
-from app import access, models, readings, thresholds  # noqa: F401  (registers every table for create_all)
+from app import access, appointments, models, readings, thresholds  # noqa: F401  (registers every table for create_all)
 from app.access import assign_patient
 from app.alerts import backfill_alerts, queue_alerts
 from app.db import Base, SessionLocal, engine

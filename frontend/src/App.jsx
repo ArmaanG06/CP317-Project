@@ -1,8 +1,7 @@
-import { Calendar } from "lucide-react";
 import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import AppShell from "./components/AppShell";
-import ComingSoon from "./pages/ComingSoon";
+import Appointments from "./pages/Appointments";
 import PatientDashboard from "./pages/PatientDashboard";
 import ProfessionalAlerts from "./pages/ProfessionalAlerts";
 import ProfessionalPatientView from "./pages/ProfessionalPatientView";
@@ -48,22 +47,13 @@ export default function App() {
             <Route path="/patient" element={<PatientDashboard />} />
             <Route path="/patient/record" element={<RecordVitals />} />
             <Route path="/patient/trends" element={<Trends />} />
-            <Route
-              path="/patient/appointments"
-              element={
-                <ComingSoon
-                  title="Appointments"
-                  subtitle="Book and review visits with your care team."
-                  Icon={Calendar}
-                  message="Booking and cancelling appointments with your assigned health professional will appear here in an upcoming sprint."
-                />
-              }
-            />
+            <Route path="/patient/appointments/*" element={<Appointments key="patient" />} />
           </Route>
           <Route element={<RequireRole role="professional" />}>
             <Route path="/professional" element={<ProfessionalRoster />} />
             <Route path="/professional/alerts" element={<ProfessionalAlerts />} />
             <Route path="/professional/patients/:patientId" element={<PatientViewForRoute />} />
+            <Route path="/professional/schedule" element={<Appointments key="professional" professional />} />
           </Route>
         </Route>
       </Route>

@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app import alerts, monitoring, profiles, readings, thresholds  # noqa: F401 (register all tables)
+from app import alerts, appointements, monitoring, profiles, readings, thresholds  # noqa: F401 (register all tables)
 from app.config import FRONTEND_ORIGIN
 from app.db import Base, engine
 from app.routers import auth
@@ -51,6 +51,7 @@ app.include_router(readings.router)
 app.include_router(profiles.router)
 app.include_router(monitoring.router)
 app.include_router(alerts.router)
+app.include_router(appointments.router)
 
 
 @app.get("/health")

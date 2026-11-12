@@ -118,6 +118,27 @@ Each new flag creates one alert for **each professional assigned to that patient
 
 The list's `unreviewed_count` is global and does not change with the filters. Patients cannot use these routes, and a professional cannot access another professional's alerts. For a database with flags saved before ALT-1, run `python backfill_alerts.py` from `backend/` after updating; it creates missing recipient alerts for current assignments and is safe to rerun. `seed.py` performs the same step for fictional demo data. Do not run the demo seeder against a production database.
 
+### Appointment booking and scheduling (Zakir Hasham: APT-1, APT-2, APT-3)
+
+Patients use **Appointments** (`/patient/appointments`) to choose a date and time with an assigned health professional, confirm a booking, and review upcoming, completed, or cancelled visits. The confirmation page accepts an optional reason for the visit.
+
+Health professionals use **Schedule** (`/professional/schedule`) to create availability in 15-, 30-, 45-, or 60-minute slots, remove open slots, and search or filter bookings. The API rejects past start times, overlapping availability, and double bookings. Patient cancellation reopens the slot. Professional cancellation closes it. Both users can still see the cancelled booking in their history.
+
+| Endpoint | Description |
+|---|---|
+| `GET /appointments` | List the signed-in user's bookings and appointment history |
+| `GET /appointments/slots` | List future slots for the professional or the patient's assigned care team |
+| `POST /appointments/slots` | Split a professional's availability window into bookable slots |
+| `POST /appointments/slots/{slot_id}/book` | Book an open slot as an assigned patient |
+| `DELETE /appointments/bookings/{booking_id}` | Cancel an upcoming booking as either participant |
+| `DELETE /appointments/slots/{slot_id}` | Remove an open slot from the professional's schedule |
+
+The API uses the existing session cookie. Appointment times are stored in UTC and displayed in the browser's time zone. The API creates the `appointment_slots` and `appointment_bookings` tables on startup.
+
+**Demo:** Run `python seed.py` from `backend/`. Sign in as `dr.lee@example.com` to add future availability, then as `maya.chen@example.com` to book it. Both accounts use the demo password `Demo-Pass-123`.
+
+**Tests:** Run `pytest -q tests/test_appointments.py` from `backend/` and `npm test -- src/pages/Appointments.test.jsx` from `frontend/`.
+
 ## Running locally
 Setup instructions coming as the project is built.
 

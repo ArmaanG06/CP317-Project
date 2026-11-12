@@ -1,0 +1,30 @@
+@reference "../index.css";
+
+.appt-card {
+  @apply rounded-[20px] border border-line bg-card shadow-card;
+}
+
+.appt-link {
+  @apply inline-flex items-center gap-2 rounded text-sm font-semibold text-accent hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-accent;
+}
+
+.appt-round {
+  @apply inline-grid size-10 shrink-0 place-items-center rounded-full bg-canvas hover:bg-primary-tint focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-accent;
+}
+
+.appt-table {
+  @apply w-full text-left text-sm;
+}
+
+.appt-table th {
+  @apply whitespace-nowrap bg-canvas px-6 py-3 font-semibold text-muted;
+}
+
+.appt-table td {
+  @apply border-t border-line px-6 py-3;
+}
+
+.appt-dialog::backdrop,
+.appt-drawer::backdrop {
+  background: rgb(20 48 43 / 55%);
+}

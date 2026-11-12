@@ -14,7 +14,7 @@ const PATIENT_NAV = [
 const PRO_NAV = [
   { to: "/professional", label: "My patients", Icon: Users, end: true },
   { to: "/professional/alerts", label: "Alerts", Icon: Bell },
-  { label: "Schedule", Icon: Calendar, soon: true },
+  { to: "/professional/schedule", label: "Schedule", Icon: Calendar },
   { to: "/profile", label: "My profile", Icon: UserRound },
 ];
 
