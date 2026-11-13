@@ -47,7 +47,7 @@ export default function AppShell() {
       >
         Skip to main content
       </a>
-      <aside className="flex w-[260px] shrink-0 flex-col gap-2 bg-nav px-5 py-7">
+      <aside className="sticky top-0 flex h-screen w-[260px] shrink-0 flex-col gap-2 overflow-y-auto bg-nav px-5 py-7">
         <div className="mb-4 flex items-center gap-3">
           <span aria-hidden="true" className="flex size-10 items-center justify-center rounded-full bg-primary">
             <Heart size={22} className="text-white" />

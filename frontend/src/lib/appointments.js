@@ -1,5 +1,7 @@
 export const APPOINTMENTS = "/patient/appointments";
 export const SCHEDULE = "/professional/schedule";
+export const notesPath = (bookingId) => `${SCHEDULE}/notes/${bookingId}`; // professional: write session notes
+export const visitPath = (bookingId) => `${APPOINTMENTS}/visit/${bookingId}`; // patient: appointment details & notes
 
 export function dateKey(value) {
   const date = new Date(value);

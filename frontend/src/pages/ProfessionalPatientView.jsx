@@ -1,4 +1,4 @@
-import { ArrowLeft, Info } from "lucide-react";
+import { ArrowLeft, FileText, Info } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
@@ -8,6 +8,7 @@ import Field from "../components/Field";
 import FlaggedReadings from "../components/FlaggedReadings";
 import TrendsPanel from "../components/TrendsPanel";
 import VitalCard from "../components/VitalCard";
+import { formatDate, notesPath, timeRange } from "../lib/appointments";
 import usePageTitle from "../lib/usePageTitle";
 import { buildCards } from "../lib/vitals";
 
@@ -23,6 +24,7 @@ export default function ProfessionalPatientView() {
   const [error, setError] = useState("");
   const [flagRows, setFlagRows] = useState(null);
   const [flagError, setFlagError] = useState("");
+  const [visits, setVisits] = useState(null); // this patient's past visits with this professional
   usePageTitle(name || "Patient");
 
   const fetchFlags = useCallback(() => {
@@ -37,6 +39,9 @@ export default function ProfessionalPatientView() {
         setRoster(patients);
         setName(patients.find((p) => p.patient_id === patientId)?.full_name ?? "Patient");
         setRows(readings);
+        api("/appointments")
+          .then((all) => setVisits(all.filter((b) => b.patient_id === patientId && b.status === "completed")))
+          .catch(() => setVisits([]));
         fetchFlags();
       })
       .catch((e) =>
@@ -128,6 +133,36 @@ export default function ProfessionalPatientView() {
               </p>
             </section>
           </div>
+
+          <section aria-labelledby="visits-heading" className="flex flex-col gap-3 rounded-[20px] border border-line bg-card p-6 shadow-card">
+            <h2 id="visits-heading" className="flex items-center gap-2.5 text-xl font-semibold">
+              <FileText size={22} aria-hidden="true" className="text-primary" />
+              Past visits &amp; notes
+            </h2>
+            {visits === null && <p role="status" className="text-muted">Loading past visits…</p>}
+            {visits?.length === 0 && <p className="text-muted">No past visits with you yet.</p>}
+            {visits?.length > 0 && (
+              <ul aria-label="Past visits" className="divide-y divide-line">
+                {visits.map((v) => (
+                  <li key={v.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                    <div>
+                      <p className="font-medium">{formatDate(v.slot.starts_at, { weekday: "short", month: "short", day: "numeric", year: "numeric" })}</p>
+                      <p className="text-sm text-muted">{timeRange(v.slot)} · {v.slot.location}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className={`rounded-full px-3 py-1 text-sm ${v.notes_published ? "bg-ok-bg text-ok-text" : v.has_draft_notes ? "bg-warn-bg text-warn-text" : "border border-line bg-canvas text-muted"}`}>
+                        {v.notes_published ? "Notes published" : v.has_draft_notes ? "Draft notes" : "No notes"}
+                      </span>
+                      <Link to={notesPath(v.id)} className="font-medium text-accent hover:underline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                        {v.notes_published || v.has_draft_notes ? "Open notes" : "Write notes"}
+                        <span className="sr-only"> for the visit on {formatDate(v.slot.starts_at)}</span>
+                      </Link>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </>
       )}
     </>

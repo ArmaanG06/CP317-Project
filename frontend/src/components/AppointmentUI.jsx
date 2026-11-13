@@ -1,10 +1,23 @@
+import {
+  ArrowLeft, Calendar, CalendarCheck, Check, ChevronLeft, ChevronRight, Circle, Clock, Eye, FileText, Info, MapPin,
+  Search, Trash2, User, X,
+} from "lucide-react";
 import { useEffect, useRef } from "react";
 import { dateKey, formatDate, localDate } from "../lib/appointments";
 
-const ICONS = import.meta.glob("../assets/appointments/*.svg", { eager: true, query: "?url", import: "default" });
+// Icon names used across the appointment pages, mapped to lucide icons (sizes follow the Figma: 16 small, 20 default).
+const ICONS = {
+  back: [ArrowLeft, 18], previous: [ChevronLeft, 20], next: [ChevronRight, 20], close: [X, 20], search: [Search, 18],
+  info: [Info, 20], selected: [Check, 18], cancel: [X, 16], remove: [Trash2, 16], notes: [FileText, 16], view: [Eye, 16],
+  booked: [CalendarCheck, 14], open: [Circle, 14], completed: [Check, 14],
+  "person-small": [User, 16], "pin-small": [MapPin, 16], "clock-small": [Clock, 16],
+  "dialog-date": [Calendar, 20], "dialog-time": [Clock, 20], "dialog-person": [User, 20], "dialog-pin": [MapPin, 20],
+  "dialog-info": [Info, 20],
+};
 
 export function Icon({ name }) {
-  return <img src={ICONS[`../assets/appointments/${name}.svg`]} alt="" aria-hidden="true" className="max-w-none shrink-0" />;
+  const [Glyph, size] = ICONS[name] ?? [Circle, 16];
+  return <Glyph size={size} aria-hidden="true" className="shrink-0" />;
 }
 
 export function Avatar({ name, large = false }) {

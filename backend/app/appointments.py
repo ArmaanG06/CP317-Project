@@ -6,7 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Uuid, select, update
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, Uuid, select, update
 from sqlalchemy.orm import Mapped, Session, aliased, mapped_column
 
 from app.access import PatientAssignment, is_assigned, require_role
@@ -36,6 +36,11 @@ class AppointmentBooking(Base):
     patient_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
     reason: Mapped[str] = mapped_column(String(500))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Session notes (Figma 17–20). Shared notes reach the patient only once published; internal notes never do.
+    shared_notes: Mapped[str | None] = mapped_column(Text)
+    internal_notes: Mapped[str | None] = mapped_column(Text)
+    notes_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 active_booking = AppointmentBooking.cancelled_at.is_(None)
@@ -91,14 +96,47 @@ class SlotView(BaseModel):
 class BookingView(BaseModel):
     id: uuid.UUID
     slot: SlotView
+    patient_id: uuid.UUID
     patient_name: str
     reason: str
     status: Literal["booked", "completed", "cancelled"]
+    notes_published: bool = False  # true once the professional has shared notes with the patient
+    has_draft_notes: bool = False  # professionals only: notes written but not yet shared
+
+
+class NotesUpdate(BaseModel):
+    """Save one notes box. `publish` shares the patient notes; saving them without it keeps them as a draft."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    shared_notes: str | None = Field(default=None, max_length=5000)
+    internal_notes: str | None = Field(default=None, max_length=5000)
+    publish: bool = False
+
+    @model_validator(mode="after")
+    def check(self):
+        if self.shared_notes is None and self.internal_notes is None:
+            raise ValueError("Enter notes to save.")
+        if self.publish and not (self.shared_notes or "").strip():
+            raise ValueError("Write notes for the patient before publishing them.")
+        return self
+
+
+class BookingDetail(BookingView):
+    professional_name: str
+    shared_notes: str | None = None  # patients only receive these once published
+    internal_notes: str | None = None  # never sent to patients
+    notes_published_at: datetime | None = None
+    notes_updated_at: datetime | None = None
 
 
 def as_utc(value: datetime) -> datetime:
     # SQLite returns naive timestamps. All writes use UTC.
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+
+
+def booking_status(booking: "AppointmentBooking", slot: AppointmentSlot, now: datetime) -> str:
+    return "cancelled" if booking.cancelled_at else "completed" if as_utc(slot.ends_at) <= now else "booked"
 
 
 def slot_view(slot: AppointmentSlot, professional_name: str, booked: bool) -> SlotView:
@@ -156,12 +194,15 @@ def list_bookings(user: CurrentUser, db: Session = Depends(get_db)):
         bookings = bookings.where(AppointmentSlot.professional_id == user.id)
 
     now = datetime.now(timezone.utc)
+    professional = user.role == Role.professional
     result = []
     for booking, slot, professional_name, patient_name in db.execute(bookings):
-        status = "cancelled" if booking.cancelled_at else "completed" if as_utc(slot.ends_at) <= now else "booked"
+        status = booking_status(booking, slot, now)
         result.append(BookingView(
             id=booking.id, slot=slot_view(slot, professional_name, status == "booked"),
-            patient_name=patient_name, reason=booking.reason, status=status,
+            patient_id=booking.patient_id, patient_name=patient_name, reason=booking.reason, status=status,
+            notes_published=booking.notes_published_at is not None,
+            has_draft_notes=professional and booking.notes_published_at is None and bool(booking.shared_notes),
         ))
     # Show upcoming visits first, followed by the most recent history.
     return sorted(result, key=lambda item: (
@@ -281,3 +322,74 @@ def withdraw_slot(
         raise HTTPException(409, "This slot is no longer open. Refresh your schedule.")
     slot.closed = True
     db.commit()
+
+
+def find_booking(db: Session, booking_id: uuid.UUID, user: User):
+    """The booking with its slot and names, if this user may see it (their own visit, or their own patient's)."""
+    patient = aliased(User)
+    professional = aliased(User)
+    row = (
+        select(AppointmentBooking, AppointmentSlot, professional.full_name, patient.full_name)
+        .join(AppointmentSlot, AppointmentBooking.slot_id == AppointmentSlot.id)
+        .join(professional, AppointmentSlot.professional_id == professional.id)
+        .join(patient, AppointmentBooking.patient_id == patient.id)
+        .where(AppointmentBooking.id == booking_id)
+    )
+    if user.role == Role.patient:
+        row = row.where(AppointmentBooking.patient_id == user.id)
+    else:
+        row = row.where(AppointmentSlot.professional_id == user.id)
+    found = db.execute(row).first()
+    if found is None:
+        raise HTTPException(404, "Appointment not found.")
+    return found
+
+
+def booking_detail(booking, slot, professional_name, patient_name, user: User) -> BookingDetail:
+    now = datetime.now(timezone.utc)
+    status = booking_status(booking, slot, now)
+    published = booking.notes_published_at is not None
+    professional = user.role == Role.professional
+    return BookingDetail(
+        id=booking.id, slot=slot_view(slot, professional_name, status == "booked"),
+        patient_id=booking.patient_id, patient_name=patient_name, professional_name=professional_name,
+        reason=booking.reason, status=status, notes_published=published,
+        has_draft_notes=professional and not published and bool(booking.shared_notes),
+        shared_notes=booking.shared_notes if professional or published else None,
+        internal_notes=booking.internal_notes if professional else None,
+        notes_published_at=as_utc(booking.notes_published_at) if booking.notes_published_at else None,
+        notes_updated_at=as_utc(booking.notes_updated_at) if professional and booking.notes_updated_at else None,
+    )
+
+
+@router.get("/bookings/{booking_id}", response_model=BookingDetail)
+def get_booking(booking_id: uuid.UUID, user: CurrentUser, db: Session = Depends(get_db)):
+    """One visit with its notes. Patients see shared notes only after they are published, and never internal notes."""
+    return booking_detail(*find_booking(db, booking_id, user), user)
+
+
+@router.put("/bookings/{booking_id}/notes", response_model=BookingDetail)
+def save_notes(
+    booking_id: uuid.UUID,
+    payload: NotesUpdate,
+    user: User = Depends(require_role(Role.professional)),
+    db: Session = Depends(get_db),
+):
+    booking, slot, professional_name, patient_name = find_booking(db, booking_id, user)
+    if booking.cancelled_at:
+        raise HTTPException(409, "This appointment was cancelled, so notes can't be added.")
+    if as_utc(slot.starts_at) > datetime.now(timezone.utc):
+        raise HTTPException(409, "Notes can be written once the appointment has started.")
+    now = datetime.now(timezone.utc)
+    if payload.internal_notes is not None:
+        booking.internal_notes = payload.internal_notes.strip() or None
+    if payload.shared_notes is not None:
+        text = payload.shared_notes.strip() or None
+        if payload.publish:
+            booking.notes_published_at = now
+        elif text != booking.shared_notes:
+            booking.notes_published_at = None  # edited notes go back to draft until published again
+        booking.shared_notes = text
+    booking.notes_updated_at = now
+    db.commit()
+    return booking_detail(booking, slot, professional_name, patient_name, user)

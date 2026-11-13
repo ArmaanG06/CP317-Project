@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
 import AppShell from "./components/AppShell";
+import AppointmentDetails from "./pages/AppointmentDetails";
 import Appointments from "./pages/Appointments";
 import PatientDashboard from "./pages/PatientDashboard";
 import ProfessionalAlerts from "./pages/ProfessionalAlerts";
@@ -8,6 +9,7 @@ import ProfessionalPatientView from "./pages/ProfessionalPatientView";
 import ProfessionalRoster from "./pages/ProfessionalRoster";
 import Profile from "./pages/Profile";
 import RecordVitals from "./pages/RecordVitals";
+import SessionNotes from "./pages/SessionNotes";
 import SignIn from "./pages/SignIn";
 import Trends from "./pages/Trends";
 
@@ -47,6 +49,7 @@ export default function App() {
             <Route path="/patient" element={<PatientDashboard />} />
             <Route path="/patient/record" element={<RecordVitals />} />
             <Route path="/patient/trends" element={<Trends />} />
+            <Route path="/patient/appointments/visit/:bookingId" element={<AppointmentDetails />} />
             <Route path="/patient/appointments/*" element={<Appointments key="patient" />} />
           </Route>
           <Route element={<RequireRole role="professional" />}>
@@ -54,6 +57,7 @@ export default function App() {
             <Route path="/professional/alerts" element={<ProfessionalAlerts />} />
             <Route path="/professional/patients/:patientId" element={<PatientViewForRoute />} />
             <Route path="/professional/schedule" element={<Appointments key="professional" professional />} />
+            <Route path="/professional/schedule/notes/:bookingId" element={<SessionNotes />} />
           </Route>
         </Route>
       </Route>

@@ -10,6 +10,12 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 };
 
+// jsdom has no <dialog> methods; the appointment dialogs call showModal/close.
+if (typeof HTMLDialogElement !== "undefined") {
+  HTMLDialogElement.prototype.showModal ??= function showModal() { this.open = true; };
+  HTMLDialogElement.prototype.close ??= function close() { this.open = false; };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();

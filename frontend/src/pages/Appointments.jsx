@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useMatch, useNavigate } from "react-router-dom";
+import { Link, useLocation, useMatch, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { Avatar, Badge, Dialog, Icon, MonthCalendar } from "../components/AppointmentUI";
 import Banner from "../components/Banner";
 import Button from "../components/Button";
 import Field from "../components/Field";
-import { APPOINTMENTS, dateKey, duration, formatDate, formatTime, localDate, timeRange } from "../lib/appointments";
+import { APPOINTMENTS, dateKey, duration, formatDate, formatTime, localDate, notesPath, timeRange, visitPath } from "../lib/appointments";
 import usePageTitle from "../lib/usePageTitle";
 import "./appointments.css";
 
@@ -43,6 +43,22 @@ function TextAction({ icon, children, onClick, danger = false }) {
     <button type="button" onClick={onClick} className={`appt-link ${danger ? "!text-alert-text" : "!text-muted"}`}>
       <Icon name={icon} />{children}
     </button>
+  );
+}
+
+function NotesAction({ booking, professional }) {
+  if (booking.status !== "completed") return null;
+  if (professional) {
+    return (
+      <Link to={notesPath(booking.id)} className="appt-link !text-accent">
+        <Icon name="notes" />Notes{booking.has_draft_notes && <span className="text-muted"> (draft)</span>}
+      </Link>
+    );
+  }
+  return (
+    <Link to={visitPath(booking.id)} className="appt-link !text-accent">
+      <Icon name="view" />{booking.notes_published ? "View notes" : "Details"}
+    </Link>
   );
 }
 
@@ -113,7 +129,13 @@ function BookingTable({ bookings, professional, onCancel }) {
                   <td><DateTime slot={slot} /></td>
                   {!professional && <td>{identity}</td>}
                   <td>{slot.location}</td><td><Badge status={status} /></td>
-                  <td>{canCancel(booking) ? <TextAction icon="cancel" danger onClick={() => onCancel(booking)}>Cancel</TextAction> : <span aria-label="No actions">—</span>}</td>
+                  <td>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      {booking.status === "completed" && <NotesAction booking={booking} professional={professional} />}
+                      {canCancel(booking) && <TextAction icon="cancel" danger onClick={() => onCancel(booking)}>Cancel</TextAction>}
+                      {booking.status !== "completed" && !canCancel(booking) && <span aria-label="No actions">—</span>}
+                    </div>
+                  </td>
                 </tr>
               );
             })}
@@ -403,6 +425,7 @@ function CancelDialog({ booking, professional, onClose, onConfirm, busy, error }
 
 export default function Appointments({ professional = false }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const confirming = useMatch(`${APPOINTMENTS}/book/:slotId/confirm`);
   const choosing = useMatch(`${APPOINTMENTS}/book`);
   const [data, setData] = useState(null);
@@ -413,7 +436,7 @@ export default function Appointments({ professional = false }) {
   const [selectedId, setSelectedId] = useState(null);
   const [day, setDay] = useState(null);
   const [month, setMonth] = useState(null);
-  const [tab, setTab] = useState("availability");
+  const [tab, setTab] = useState(location.state?.tab ?? "availability"); // the session notes page links back to "appointments"
   const [drawer, setDrawer] = useState(false);
   const [cancelling, setCancelling] = useState(null);
   const [removing, setRemoving] = useState(null);

@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select, text
 
 from app import access, appointments, models, readings, thresholds  # noqa: F401  (registers every table for create_all)
 from app.access import assign_patient
@@ -72,13 +72,50 @@ DEMO_CLINICS = {
     "dingle.fritz@example.com": "Clinic D, Guelph",
 }
 DEMO_HOURS = [(9, 12), (13, 16)]  # morning and afternoon availability blocks, alternating by day
-PAST_NOTES = [
-    "Visit notes: Reviewed two weeks of home readings. Blood pressure trending down; continue current plan and log readings twice daily.",
-    "Visit notes: Follow-up on an elevated heart rate reading. Likely after exercise; no changes. Re-check resting rate in the morning.",
-    "Visit notes: Monthly check-in. Vitals within range. Discussed hydration and sleep; next review in one month.",
-    "Visit notes: Reviewed a low oxygen saturation reading. Repeat readings normal; probably a poor sensor fit. Shown how to re-seat the device.",
-    "Visit notes: Temperature spike last week has resolved. No further action; contact the clinic if it returns.",
-    "Visit notes: Medication review. Patient reports no side effects. Keep the current dose and continue home monitoring.",
+# Completed demo visits: (reason for visit, notes shared with the patient, internal notes for professionals only).
+SESSION_NOTES = [
+    (
+        "Reason for visit: Review two weeks of home blood pressure readings.",
+        "Summary: Your blood pressure has been trending down over the past two weeks.\n"
+        "Plan: Keep recording readings each morning, seated and rested for five minutes.\n"
+        "Follow-up: Book a check-in in about four weeks, or sooner if your readings change.",
+        "Responding well to the current plan. Re-check lying and standing BP next visit.",
+    ),
+    (
+        "Reason for visit: Follow-up on an elevated heart rate reading.",
+        "Summary: The high heart rate reading was most likely taken right after exercise.\n"
+        "Plan: Take your heart rate after resting for five minutes, ideally in the morning.\n"
+        "Follow-up: No changes needed. Contact the clinic if you feel dizzy or short of breath.",
+        "Resting HR otherwise normal. No further work-up unless symptoms appear.",
+    ),
+    (
+        "Reason for visit: Monthly check-in.",
+        "Summary: All your vitals were within your usual range this month.\n"
+        "Plan: Keep up your routine. Aim for regular sleep and good hydration.\n"
+        "Follow-up: Next review in about one month.",
+        "Stable. Mentioned occasional poor sleep; ask again next visit.",
+    ),
+    (
+        "Reason for visit: Discuss a low oxygen saturation reading.",
+        "Summary: Your repeat oxygen readings were normal. The low one was probably from the sensor not sitting snugly.\n"
+        "Plan: Warm your hands and keep still while measuring; re-seat the sensor if a reading looks low.\n"
+        "Follow-up: Contact the clinic if low readings repeat or you feel short of breath.",
+        "Likely artifact. Confirm the home SpO2 device model; accuracy varies by device.",
+    ),
+    (
+        "Reason for visit: Temperature spike last week.",
+        "Summary: Your temperature is back to normal and the spike has resolved.\n"
+        "Plan: Rest and fluids if it returns; record a reading morning and evening while unwell.\n"
+        "Follow-up: Contact the clinic if it rises above 38.5 °C or lasts more than three days.",
+        "Probable viral illness, resolved. No action.",
+    ),
+    (
+        "Reason for visit: Medication review.",
+        "Summary: You reported no side effects from your current medication.\n"
+        "Plan: Keep the same dose and continue home monitoring.\n"
+        "Follow-up: Review again at your next scheduled visit.",
+        "Tolerating medication well. Labs not due until next quarter.",
+    ),
 ]
 CANCEL_REASONS = [
     "Reason for visit: Routine follow-up. (Cancelled by patient: schedule conflict.)",
@@ -155,7 +192,13 @@ def seed_appointments(db, pro, patients, now):
                     patient_id=patient.id, reason=CANCEL_REASONS[i % 2], cancelled_at=start - timedelta(days=2),
                 )))
             else:
-                bookings.append((slot, dict(patient_id=patient.id, reason=PAST_NOTES[(i + k) % len(PAST_NOTES)])))
+                reason, shared, internal = SESSION_NOTES[(i + k) % len(SESSION_NOTES)]
+                draft = k == 0 and i % 4 == 2  # a few recent visits still have unpublished draft notes
+                bookings.append((slot, dict(
+                    patient_id=patient.id, reason=reason, shared_notes=shared, internal_notes=internal,
+                    notes_updated_at=end + timedelta(hours=1),
+                    notes_published_at=None if draft else end + timedelta(hours=1),
+                )))
 
     db.add_all(slots)
     db.flush()  # gives slots their ids before bookings point at them
@@ -244,8 +287,41 @@ PROFILES = {
 }
 
 
+NOTE_COLUMNS = {
+    "shared_notes": "TEXT", "internal_notes": "TEXT",
+    "notes_published_at": "TIMESTAMP WITH TIME ZONE", "notes_updated_at": "TIMESTAMP WITH TIME ZONE",
+}
+
+
+def add_note_columns():
+    """create_all doesn't add columns to existing tables, so add the session-notes columns to appointment_bookings."""
+    existing = {c["name"] for c in inspect(engine).get_columns("appointment_bookings")}
+    with engine.begin() as conn:
+        for name, kind in NOTE_COLUMNS.items():
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE appointment_bookings ADD COLUMN {name} {kind}"))
+                print("added column: appointment_bookings." + name)
+
+
+def upgrade_demo_notes(db):
+    """Earlier demo data stored visit notes in `reason`. Move them into published session notes."""
+    rows = db.scalars(select(AppointmentBooking).where(
+        AppointmentBooking.reason.like("Visit notes:%"), AppointmentBooking.shared_notes.is_(None)
+    )).all()
+    for i, booking in enumerate(rows):
+        slot = db.get(AppointmentSlot, booking.slot_id)
+        reason, shared, internal = SESSION_NOTES[i % len(SESSION_NOTES)]
+        published = as_aware(slot.ends_at) + timedelta(hours=1)
+        booking.reason, booking.shared_notes, booking.internal_notes = reason, shared, internal
+        booking.notes_published_at = booking.notes_updated_at = published
+    db.commit()
+    if rows:
+        print(f"demo visit notes moved into session notes: {len(rows)}")
+
+
 def main():
     Base.metadata.create_all(engine)  # creates the users, readings, profiles and patient_assignments tables if missing
+    add_note_columns()
     with SessionLocal() as db:
         for name, email, role in USERS:
             if db.scalar(select(User).where(User.email == email)):
@@ -322,6 +398,7 @@ def main():
             made_slots, made_bookings = seed_appointments(db, pro, [p for p in patients if p], now)
             if made_slots:
                 print(f"demo appointments added: {pro_email} ({made_slots} slots, {made_bookings} bookings)")
+        upgrade_demo_notes(db)
 
 
 if __name__ == "__main__":

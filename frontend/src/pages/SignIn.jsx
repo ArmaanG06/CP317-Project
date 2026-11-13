@@ -88,10 +88,10 @@ export default function SignIn() {
                 Prototype demo accounts
                 <span className="h-px flex-1 bg-line" />
               </div>
-              <Button variant="secondary" loading={busy} onClick={() => attempt(DEMO.patient)}>
+              <Button variant="secondary" loading={busy} className="!px-4 whitespace-nowrap" onClick={() => attempt(DEMO.patient)}>
                 Continue as Maya Chen (patient)
               </Button>
-              <Button variant="secondary" loading={busy} onClick={() => attempt(DEMO.professional)}>
+              <Button variant="secondary" loading={busy} className="!px-4 whitespace-nowrap" onClick={() => attempt(DEMO.professional)}>
                 Continue as Dr. Lee (health professional)
               </Button>
             </>
