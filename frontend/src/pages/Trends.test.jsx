@@ -104,3 +104,55 @@ describe("Trends page (TR_REP-1)", () => {
     expect(within(alert).getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 });
+
+describe("Trends filters (TR_REP-2 and TR_REP-3)", () => {
+  const flaggedHistory = {
+    ...HISTORY,
+    readings: [
+      { ...r("heart_rate", 110, "2026-11-01T13:00:00Z", "a"), flag: { direction: "above" } },
+      { ...r("heart_rate", 70, "2026-11-02T13:00:00Z", "b"), flag: null },
+      { ...r("systolic", 150, "2026-11-01T13:00:00Z", "a"), flag: { direction: "above" } },
+      { ...r("diastolic", 80, "2026-11-01T13:00:00Z", "a"), flag: null },
+    ],
+  };
+
+  it("isolates a vital with the correct label, unit, and blood pressure lines", async () => {
+    const spy = await openTrends(flaggedHistory);
+    const user = userEvent.setup();
+    await screen.findByRole("region", { name: "Heart rate trend" });
+    await user.selectOptions(screen.getByLabelText("Vital sign"), "bp");
+    const bp = screen.getByRole("region", { name: "Blood pressure trend" });
+    expect(bp).toHaveTextContent("Blood pressure (mmHg)");
+    expect(bp).toHaveTextContent("Systolic: 1 reading");
+    expect(bp).toHaveTextContent("Diastolic: 1 reading");
+    await user.click(within(bp).getByText("Show values as a table"));
+    expect(within(bp).getByRole("columnheader", { name: "Systolic (mmHg)" })).toBeInTheDocument();
+    expect(within(bp).getByRole("columnheader", { name: "Diastolic (mmHg)" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Heart rate trend" })).not.toBeInTheDocument();
+    expect(historyCalls(spy)).toHaveLength(1);
+  });
+
+  it("combines flagged status, vital, and period; explains an empty filtered result", async () => {
+    const spy = await openTrends(flaggedHistory);
+    const user = userEvent.setup();
+    await screen.findByRole("region", { name: "Heart rate trend" });
+    await user.selectOptions(screen.getByLabelText("Vital sign"), "bp");
+    await user.selectOptions(screen.getByLabelText("Flag status"), "flagged");
+    const bp = screen.getByRole("region", { name: "Blood pressure trend" });
+    expect(bp).toHaveTextContent("Systolic: 1 reading");
+    expect(bp).toHaveTextContent("Diastolic: no readings");
+    expect(screen.getByText(/1 value/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Flag status"), "unflagged");
+    expect(bp).toHaveTextContent("Systolic: no readings");
+    expect(bp).toHaveTextContent("Diastolic: 1 reading");
+    await user.selectOptions(screen.getByLabelText("Vital sign"), "spo2");
+    expect(screen.getByText("No readings match these filters")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Blood pressure trend" })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Vital sign"), "heart_rate");
+    expect(screen.getByRole("region", { name: "Heart rate trend" })).toHaveTextContent("Latest 70 bpm");
+    await user.click(screen.getByRole("button", { name: "Last 7 days" }));
+    const { from, to } = presetRange(7);
+    expect(params(historyCalls(spy).at(-1))).toEqual(periodParams(from, to));
+    expect(screen.getByLabelText("Flag status")).toHaveValue("unflagged");
+  });
+});

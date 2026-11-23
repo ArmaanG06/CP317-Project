@@ -2,7 +2,7 @@ import { CircleAlert } from "lucide-react";
 
 // Labelled input with an optional unit shown inside the field, a hint, and an inline error.
 // Pass `options` ([{ value, label }]) to render a dropdown instead of a text input.
-export default function Field({ id, label, hint, error, unit, options, ...inputProps }) {
+export default function Field({ id, label, hint, error, unit, options, emptyLabel = "Select…", ...inputProps }) {
   const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
   const Control = options ? "select" : "input";
   return (
@@ -25,7 +25,7 @@ export default function Field({ id, label, hint, error, unit, options, ...inputP
         >
           {options && (
             <>
-              <option value="">Select…</option>
+              <option value="">{emptyLabel}</option>
               {options.map((o) => (
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
