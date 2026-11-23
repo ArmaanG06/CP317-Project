@@ -118,6 +118,12 @@ Each new flag creates one alert for **each professional assigned to that patient
 
 The list's `unreviewed_count` is global and does not change with the filters. Patients cannot use these routes, and a professional cannot access another professional's alerts. For a database with flags saved before ALT-1, run `python backfill_alerts.py` from `backend/` after updating; it creates missing recipient alerts for current assignments and is safe to rerun. `seed.py` performs the same step for fictional demo data. Do not run the demo seeder against a production database.
 
+### Trends filters (Jacob Habte: TR_REP-2, TR_REP-3)
+
+The **Trends & history** view now has **Vital sign** and **Flag status** filters alongside its existing time period controls. Choose one vital sign to show only its chart, summary and values in the selected period; **Blood pressure** keeps separate systolic and diastolic lines and values. Choose **All readings**, **Flagged**, or **Unflagged** to filter those measurements further. The two filters can be combined, and an empty match explains how to adjust them.
+
+The filters use the existing history endpoint's saved `flag` on each reading. A flag means a monitoring limit was breached when the reading was recorded; it is not a clinical risk classification. Systolic and diastolic each keep their own flag status. Filtering happens in `frontend/src/components/TrendsPanel.jsx` and `frontend/src/lib/trends.js` without a new API or changed date boundaries (tests: `frontend/src/pages/Trends.test.jsx`, `frontend/src/lib/trends.test.js`). The same panel is also used on an assigned professional's patient view.
+
 ### Appointment booking and scheduling (Zakir Hasham: APT-1, APT-2, APT-3)
 
 Patients use **Appointments** (`/patient/appointments`) to choose a date and time with an assigned health professional, confirm a booking, and review upcoming, completed, or cancelled visits. The confirmation page accepts an optional reason for the visit.

@@ -16,18 +16,22 @@ import {
   presetRange,
   summaryText,
   buildSeries,
+  CHARTS,
+  filterReadings,
 } from "../lib/trends";
 
 const COLORS = ["#1F6F5C", "#2F4FD0"]; // --color-primary, --color-accent
 
 // TR_REP-1 / MON-2: vital-sign trends over a chosen period. `historyPath` is /readings/history for the
 // signed-in patient, or /patients/{id}/readings/history for a professional viewing an assigned patient.
-// ALT-2 flags can be layered onto these charts later (e.g. marking flagged points) without changing the API.
+// TR_REP-2/3 filter the returned values locally by vital and saved threshold flag.
 export default function TrendsPanel({ historyPath }) {
   const [range, setRange] = useState(() => presetRange(DEFAULT_DAYS));
   const [draft, setDraft] = useState(range); // the From/To inputs before they're applied
   const [data, setData] = useState(null);
   const [error, setError] = useState(null); // { title, messages }
+  const [vital, setVital] = useState("");
+  const [flagStatus, setFlagStatus] = useState("");
   const latestRequest = useRef(0);
 
   const fetchHistory = useCallback(
@@ -64,7 +68,8 @@ export default function TrendsPanel({ historyPath }) {
   }
 
   const retry = () => show({ ...range });
-  const charts = data ? buildSeries(data.readings) : [];
+  const filteredReadings = data ? filterReadings(data.readings, vital, flagStatus) : [];
+  const charts = data ? buildSeries(filteredReadings).filter((chart) => !vital || chart.key === vital) : [];
   const loading = data === null && !error;
 
   return (
@@ -77,7 +82,7 @@ export default function TrendsPanel({ historyPath }) {
           </h2>
           <p className="text-sm text-muted" aria-live="polite">
             Showing {formatRange(range.from, range.to)}
-            {data && ` · ${data.readings.length} ${data.readings.length === 1 ? "value" : "values"}`}
+            {data && ` · ${filteredReadings.length} ${filteredReadings.length === 1 ? "value" : "values"}`}
           </p>
         </div>
 
@@ -105,6 +110,18 @@ export default function TrendsPanel({ historyPath }) {
           <Button type="submit" variant="secondary">Show period</Button>
         </form>
         <p className="text-sm text-muted">Both dates are included.</p>
+
+        <div className="flex flex-wrap gap-4">
+          <div className="w-56">
+            <Field id="trend-vital" label="Vital sign" value={vital} onChange={(e) => setVital(e.target.value)}
+              emptyLabel="All vital signs" options={CHARTS.map(({ key, label }) => ({ value: key, label }))} />
+          </div>
+          <div className="w-56">
+            <Field id="trend-flags" label="Flag status" value={flagStatus} onChange={(e) => setFlagStatus(e.target.value)}
+              emptyLabel="All readings" options={[{ value: "flagged", label: "Flagged" }, { value: "unflagged", label: "Unflagged" }]} />
+          </div>
+        </div>
+        <p className="text-sm text-muted">Flags show readings outside saved monitoring limits, not a clinical risk level.</p>
       </div>
 
       {error && (
@@ -125,8 +142,15 @@ export default function TrendsPanel({ historyPath }) {
         </div>
       )}
 
-      {data && data.readings.length > 0 && (
-        <div className="grid grid-cols-2 gap-5">
+      {data && data.readings.length > 0 && filteredReadings.length === 0 && (
+        <div className="rounded-[20px] border border-line bg-card p-8 text-center shadow-card">
+          <p className="font-semibold">No readings match these filters</p>
+          <p className="text-muted">Try another vital sign, flag status, or time period.</p>
+        </div>
+      )}
+
+      {data && filteredReadings.length > 0 && (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {charts.map((chart) => (
             <TrendChart key={chart.key} chart={chart} />
           ))}
