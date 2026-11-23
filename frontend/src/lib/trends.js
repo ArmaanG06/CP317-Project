@@ -45,6 +45,18 @@ export const CHARTS = [
   { key: "spo2", label: LIMITS.spo2.label, unit: "%", decimals: 0, lines: [{ key: "spo2", name: "Oxygen saturation" }] },
 ];
 
+// Filter the saved history rows before building charts and summaries. Blood pressure
+// includes both measurement types, while flag status belongs to each value separately.
+export function filterReadings(readings, vital, flagStatus) {
+  return readings.filter((reading) => {
+    const vitalMatches = !vital || (vital === "bp"
+      ? reading.vital_type === "systolic" || reading.vital_type === "diastolic"
+      : reading.vital_type === vital);
+    const flagMatches = !flagStatus || (flagStatus === "flagged" ? Boolean(reading.flag) : !reading.flag);
+    return vitalMatches && flagMatches;
+  });
+}
+
 export function buildSeries(readings = []) {
   const points = Object.fromEntries(CHARTS.map((c) => [c.key, []]));
   const bp = new Map(); // submission_id -> point

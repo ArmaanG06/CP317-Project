@@ -1,6 +1,6 @@
 // TR_REP-1 helpers: inclusive periods, blood-pressure pairing and summaries.
 import { describe, expect, it } from "vitest";
-import { buildSeries, checkRange, periodParams, presetRange, summaryText } from "./trends";
+import { buildSeries, checkRange, filterReadings, periodParams, presetRange, summaryText } from "./trends";
 
 const row = (vital_type, value, recorded_at, submission_id = recorded_at) => ({ vital_type, value, recorded_at, submission_id });
 
@@ -52,5 +52,17 @@ describe("trend helpers", () => {
       "Systolic: 1 reading. Lowest 120, highest 120, average 120 mmHg. Latest 120 mmHg. " +
         "Diastolic: 1 reading. Lowest 80, highest 80, average 80 mmHg. Latest 80 mmHg."
     );
+  });
+
+  it("combines vital and saved flag filters per measurement, including both blood pressure types", () => {
+    const readings = [
+      { ...row("systolic", 150, "2026-11-01T08:00:00Z", "a"), flag: { direction: "above" } },
+      { ...row("diastolic", 80, "2026-11-01T08:00:00Z", "a"), flag: null },
+      { ...row("heart_rate", 110, "2026-11-01T08:00:00Z", "a"), flag: { direction: "above" } },
+    ];
+    expect(filterReadings(readings, "bp", "flagged")).toEqual([readings[0]]);
+    expect(filterReadings(readings, "bp", "unflagged")).toEqual([readings[1]]);
+    expect(filterReadings(readings, "heart_rate", "flagged")).toEqual([readings[2]]);
+    expect(filterReadings(readings, "", "")).toEqual(readings);
   });
 });
