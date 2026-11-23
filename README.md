@@ -3,6 +3,19 @@
 **Authors:** Zakir Hasham, Armaan Gandhara, Jacob Habte, Arica Ng, Jenny Wang\
 **Stack:** React.js (Front-End), FastAPI, Python, Supabase (SQL Backend)
 
+## Try it online
+**Live demo: [bit.ly/VitalTrack](https://bit.ly/VitalTrack)**
+
+1. Open the link. The app is on Render's free plan, so if nobody has used it recently the first load can take up to a minute while it wakes up.
+2. Sign in with a demo account (all fictional; password `Demo-Pass-123`):
+
+| Role | Email | What to try |
+|---|---|---|
+| Patient | `maya.chen@example.com` | Record vitals, view trends, see flagged readings |
+| Health professional | `dr.lee@example.com` | Open **My patients**, review alerts, set a patient's flag thresholds |
+
+The one-click demo buttons on the sign-in page only appear when running locally, so type the email and password on the live site. The demo accounts exist only if the database has been seeded (`python seed.py`, see below). No real health information is stored.
+
 ## Structure
 - `backend/`: FastAPI API and database code
 - `frontend/`: React UI
@@ -85,7 +98,7 @@ Backend in `backend/app/readings.py` and `backend/app/monitoring.py` (tests: `ba
 - **Patient dashboard for professionals** (`/professional/patients/:patientId`): latest readings, the same trends, and saved flagged readings. A **Switch patient** menu moves between assigned patients, and the page reloads fully for each one so no data carries over. Unassigned patients still get a 403.
 - **Demo history:** `python seed.py` adds about 30 days of morning and evening readings for 8 demo patients, including a few out-of-range values for testing flags. These rows have `source = 'demo_seed'`; remove them with `DELETE FROM readings WHERE source = 'demo_seed';`.
 
-### Automatic reading flags (Jacob Habte: ALT-2)
+### Automatic reading flags (Zakir Hasham & Jacob Habte: THR-1, ALT-2)
 Accepted readings are checked against alert thresholds in `backend/app/thresholds.py`, separately from the input-validation limits above. Code is integrated with `backend/app/readings.py` and `backend/seed.py`; tests are in `backend/tests/test_flags.py` and `frontend/src/pages/Flags.test.jsx`. The patient dashboard and assigned professional's patient view show saved flags with text and icons.
 
 **Prototype adult alert thresholds** (inclusive; values strictly outside the range are flagged):
@@ -117,6 +130,21 @@ Each new flag creates one alert for **each professional assigned to that patient
 | `PATCH /professionals/me/alerts/{alert_id}/review` | Mark the professional's alert reviewed; repeating the request leaves the review time unchanged |
 
 The list's `unreviewed_count` is global and does not change with the filters. Patients cannot use these routes, and a professional cannot access another professional's alerts. For a database with flags saved before ALT-1, run `python backfill_alerts.py` from `backend/` after updating; it creates missing recipient alerts for current assignments and is safe to rerun. `seed.py` performs the same step for fictional demo data. Do not run the demo seeder against a production database.
+
+### Configurable flag thresholds (Zakir Hasham: THR-1)
+An assigned professional can set custom flag limits for each of their patients. Code lives in `backend/app/thresholds.py` (the router at the bottom) and `frontend/src/components/ThresholdsPanel.jsx`, shown as the **Flag thresholds** card on `/professional/patients/:patientId`. Tests: `backend/tests/test_thresholds.py` and `frontend/src/components/ThresholdsPanel.test.jsx`.
+
+| Endpoint | Description |
+|---|---|
+| `GET /patients/{patient_id}/thresholds` | The five limits in effect (default or custom), with who last changed each and when |
+| `PUT /patients/{patient_id}/thresholds/{vital_type}` | Save `{"lower": …, "upper": …}` for one vital |
+| `DELETE /patients/{patient_id}/thresholds/{vital_type}` | Go back to the default limit (repeating it is harmless) |
+
+- **Who can use it:** only a professional assigned to that patient. Patients and other professionals get 403.
+- **Validation:** both limits must be numbers (text, numeric strings, booleans and NaN/infinity are rejected) and the low limit must be below the high limit. Invalid input returns the usual 422 `errors` and saves nothing. Unknown vitals return 404. Systolic and diastolic have separate limits.
+- **Audit:** each saved limit stores `updated_by` and `updated_at`, shown as "Last changed … by …". Only the latest change is kept, not a full history.
+- **Effect on flags:** a changed limit applies only to readings entered afterwards. Existing readings keep the limits they were evaluated with, so earlier flags do not change.
+- The limits are not checked against plausible ranges, so a professional could enter a clinically unrealistic limit.
 
 ### Trends filters (Jacob Habte: TR_REP-2, TR_REP-3)
 
@@ -169,3 +197,8 @@ npm install
 npm run dev      # http://localhost:5173
 npm test         # run tests (Vitest; the API is faked, no backend needed)
 ```
+
+## Deployment (Render)
+One Docker web service serves both the API (under `/api`) and the built React app, so there are no CORS or cross-site cookie problems. Files: `Dockerfile`, `.dockerignore`, `backend/app/site.py` (entry point `app.site:site`).
+
+Set these environment variables on the service: `DATABASE_URL` (Supabase Session pooler URL), `JWT_SECRET`, `SESSION_MINUTES` and `COOKIE_SECURE=true`. Local development is unchanged (`uvicorn app.main:app --reload` and `npm run dev`). Free web services sleep after 15 minutes without traffic.
