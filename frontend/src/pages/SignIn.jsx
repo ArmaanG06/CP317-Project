@@ -13,7 +13,7 @@ const DEMO = {
 };
 
 export default function SignIn() {
-  usePageTitle("Sign in");
+  usePageTitle("Sign In");
   const { user, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
